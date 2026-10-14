@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/">
+    <file>qml/main.qml</file>
+    <file>qml/AppLabel.qml</file>
+    <file>qml/AppField.qml</file>
+    <file>qml/NodeManager.qml</file>
+    <file>qml/MessageView.qml</file>
+    <file>qml/SettingsView.qml</file>
+  </qresource>
+</RCC>

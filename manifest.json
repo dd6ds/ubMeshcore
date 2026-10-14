@@ -1,0 +1,17 @@
+{
+  "name": "ubmeshcore",
+  "title": "ubMeshcore",
+  "version": "0.2.1",
+  "description": "Bluetooth companion app for MeshCore nodes on Ubuntu Touch",
+  "maintainer": "Developer <developer@example.com>",
+  "architecture": "$ENV{CLICK_ARCH}",
+  "framework": "ubuntu-sdk-20.04",
+  "hooks": {
+    "ubmeshcore": {
+      "apparmor": "ubmeshcore.apparmor",
+      "desktop": "ubmeshcore.desktop"
+    }
+  },
+  "type": "app",
+  "icon": "ubmeshcore.png"
+}

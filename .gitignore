@@ -1,0 +1,37 @@
+# Build output
+build/
+*.click
+
+# Rust (src/rust/target is ~145 MB - the repo-root rule "/target" does not
+# match nested target directories)
+src/rust/target/
+**/target/
+
+# CMake leftovers if someone configures in-tree
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.o
+*.so
+*.a
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Clickable
+.clickable/
+
+# Runtime / debug artefacts
+app.log
+*.log
+
+# Superseded, kept only for reference
+BluetoothManager.qml.obsolete
+
+# Editors & OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
