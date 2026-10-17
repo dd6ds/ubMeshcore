@@ -6,7 +6,28 @@
 #include <QString>
 #include <QStringList>
 
+#include <QHash>
+#include <QList>
+#include <QVector>
+
 #include "contactmodel.h"
+
+/// How a received message travelled through the mesh.
+///
+/// The companion message frame only carries the raw path_len byte
+/// (0bSSCCCCCC: hop count + hash size - 1, or 0xFF for direct). The hop
+/// hashes themselves are taken from the matching raw packet in the node's RX
+/// log (0x88), when one was seen - not for messages from the offline cache.
+struct MessagePath {
+    bool direct = false;          // path_len 0xFF: sent direct, not flooded
+    int hops = 0;                 // repeaters the message passed through
+    int hashSize = 1;             // bytes per hop hash (1..3)
+    QList<QByteArray> hashes;     // hop hashes, first repeater first
+    bool pathKnown = false;       // hashes filled from the RX log
+    double snr = 0.0;             // of the packet as our node received it
+    int rssi = 0;
+    bool radioKnown = false;
+};
 
 /// MeshCore "companion radio" protocol, as spoken over the Nordic UART link.
 ///
@@ -112,7 +133,8 @@ signals:
 
     void selfInfoReceived(const QString &name);
     void channelInfoReceived(int channelIdx, const QString &name);
-    void channelMessageReceived(int channelIdx, const QString &text, quint32 timestamp);
+    void channelMessageReceived(int channelIdx, const QString &text, quint32 timestamp,
+                                const MessagePath &path);
     /// Direct message from a contact. keyPrefix = first 6 bytes of the
     /// sender's public key; txtType tells CLI replies apart from chat.
     void contactMessageReceived(const QByteArray &keyPrefix, quint8 txtType,
@@ -146,6 +168,27 @@ private:
     /// Parses the RESP_CODE_CONTACT / PUSH_NEW_ADVERT body.
     static bool parseContact(const QByteArray &payload, MeshContact *out);
     void handleDirectMessage(const QByteArray &payload, int prefixOffset);
+
+    // --- message path correlation -------------------------------------------
+    /// A group-text packet (payload type GRP_TXT) seen in the RX log.
+    struct RxGroupPacket {
+        qint64 receivedMs = 0;
+        quint8 channelHash = 0;
+        quint8 pathLenByte = 0;
+        QByteArray path;
+        int hashSize = 1;
+        int cipherLen = 0;        // encrypted payload length (AES blocks)
+        double snr = 0.0;
+        int rssi = 0;
+        bool used = false;
+    };
+    void recordRxLog(const QByteArray &payload);
+    /// Builds the path for a channel message, consuming the matching RX log
+    /// entry if there is one.
+    MessagePath resolvePath(int channelIdx, quint8 pathLenByte, int textBytes);
+
+    QVector<RxGroupPacket> m_rxGroupPackets;    // last few seconds only
+    QHash<int, quint8> m_channelHashes;         // channel idx -> wire hash
 
     int m_pendingChannelQuery = -1;
 };

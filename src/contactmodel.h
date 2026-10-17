@@ -67,6 +67,10 @@ public:
     /// Looks up a contact by the 6-byte prefix used in pushes/messages.
     const MeshContact *findByPrefix(const QByteArray &prefix) const;
     const MeshContact *findByKeyHex(const QString &hex) const;
+    /// Names of the nodes whose public key starts with a path hop hash.
+    /// Repeaters/rooms first (only they forward); with 1-byte hashes several
+    /// nodes can match, so all candidates are returned.
+    QStringList namesForHopHash(const QByteArray &hash) const;
 
     Q_INVOKABLE QString nameForKey(const QString &keyHex) const;
     Q_INVOKABLE QString typeForKey(const QString &keyHex) const;

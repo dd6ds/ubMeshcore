@@ -42,7 +42,7 @@ ApplicationWindow {
             rootWindow.addMessage(channelIdx,
                                   hasSender ? text.substring(0, sep) : "Ch" + channelIdx,
                                   hasSender ? text.substring(sep + 2) : text,
-                                  true, timestamp)
+                                  true, timestamp, route)
         }
         onSendFailed: rootWindow.addLocalMessage("!", reason)
     }
@@ -61,18 +61,24 @@ ApplicationWindow {
     }
 
     // ts = sender's send time in epoch secs (defaults to now).
-    function addMessage(channel, sender, text, persist, ts) {
+    // route = { route: one-line path summary, routeDetail: hop-by-hop text }
+    // for received messages; every row carries both roles (ListModel needs a
+    // consistent set), empty for our own and local entries.
+    function addMessage(channel, sender, text, persist, ts, route) {
         if (!ts)
             ts = Math.floor(Date.now() / 1000)
+        var r = route ? route.route || "" : ""
+        var rd = route ? route.routeDetail || "" : ""
         messageList.append({ channel: channel, sender: sender, text: text,
-                             time: timeText(ts) })
+                             time: timeText(ts), route: r, routeDetail: rd })
         if (persist)
-            MessageStore.append({ channel: channel, sender: sender, text: text, ts: ts })
+            MessageStore.append({ channel: channel, sender: sender, text: text, ts: ts,
+                                  route: r, routeDetail: rd })
     }
 
     function addLocalMessage(sender, text) {
         // "!" entries are transient status/errors and are not stored.
-        addMessage(rootWindow.currentChannelIdx, sender, text, sender !== "!", 0)
+        addMessage(rootWindow.currentChannelIdx, sender, text, sender !== "!", 0, null)
     }
 
     // The channel pages set the index first and the name second, so save on
@@ -90,7 +96,8 @@ ApplicationWindow {
         for (var i = 0; i < stored.length; ++i) {
             var m = stored[i]
             messageList.append({ channel: m.channel, sender: m.sender, text: m.text,
-                                 time: m.ts ? timeText(m.ts) : (m.time || "") })
+                                 time: m.ts ? timeText(m.ts) : (m.time || ""),
+                                 route: m.route || "", routeDetail: m.routeDetail || "" })
         }
         var last = MessageStore.lastChannel()
         if (last.idx >= 0) {
@@ -621,11 +628,40 @@ ApplicationWindow {
                                 color: model.sender === "!" ? "#b00"
                                      : model.sender === "You" ? "#0050a0" : "#111111"
                             }
-                            AppLabel { text: model.time; color: "#666"; font.pixelSize: rootWindow.fontSecondary }
+                            AppLabel {
+                                width: parent.width
+                                // "08:31  ·  ↳ 2 hops · 2a67 › 6228"
+                                text: model.time + (model.route.length
+                                                    ? "  ·  ↳ " + model.route : "")
+                                color: "#666"
+                                font.pixelSize: rootWindow.fontSecondary
+                                elide: Text.ElideRight
+                            }
+                            // Message path, hop by hop - tap the message.
+                            Rectangle {
+                                visible: messageDelegate.expanded
+                                width: parent.width
+                                height: visible ? pathText.implicitHeight + Math.round(rootWindow.gu * 1.0) : 0
+                                color: "#f2f6fb"
+                                border.color: "#c5d6ea"
+                                radius: 4
+                                AppLabel {
+                                    id: pathText
+                                    anchors.fill: parent
+                                    anchors.margins: Math.round(rootWindow.gu * 0.5)
+                                    text: model.routeDetail
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+                                    font.family: "monospace"
+                                    font.pixelSize: rootWindow.fontSecondary
+                                }
+                            }
                         }
+                        property bool expanded: false
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: console.log("Message clicked:", model.text)
+                            enabled: model.routeDetail.length > 0
+                            onClicked: messageDelegate.expanded = !messageDelegate.expanded
                         }
                     }
                 }

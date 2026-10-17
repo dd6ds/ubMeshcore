@@ -1,5 +1,6 @@
 #include "companionprotocol.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>
 
@@ -276,6 +277,118 @@ void CompanionProtocol::handleDirectMessage(const QByteArray &payload, int prefi
     emit contactMessageReceived(prefix, txtType, text, ts);
 }
 
+// ---------------------------------------------------------------------------
+// Message path: RX log decoding and correlation
+// ---------------------------------------------------------------------------
+
+void CompanionProtocol::recordRxLog(const QByteArray &payload)
+{
+    // 0x88 payload: <snr*4:i8> <rssi:i8> <raw LoRa packet>
+    // Raw packet:   <header> [transport codes:4] <path_len> <path> <payload>
+    //   header   = 0bVVTTTTRR (RR route type, TTTT payload type)
+    //   path_len = 0bSSCCCCCC (CCCCCC hop count, SS hash size - 1)
+    if (payload.size() < 4)
+        return;
+    const QByteArray raw = payload.mid(2);
+    const quint8 header = quint8(raw.at(0));
+    const int route = header & 0x03;
+    const int payloadType = (header >> 2) & 0x0F;
+    constexpr int kPayloadGrpTxt = 0x05;
+    if (payloadType != kPayloadGrpTxt)
+        return;
+
+    int off = 1;
+    if (route == 0x00 || route == 0x03)      // TRANSPORT_FLOOD / TRANSPORT_DIRECT
+        off += 4;
+    if (raw.size() <= off)
+        return;
+    const quint8 pathLen = quint8(raw.at(off));
+    const int hashSize = (pathLen >> 6) + 1;
+    const int count = pathLen & 0x3F;
+    const int pathBytes = count * hashSize;
+    const int payloadOff = off + 1 + pathBytes;
+    // GRP_TXT payload: <channel_hash:1> <mac:2> <ciphertext>
+    if (hashSize > 3 || raw.size() < payloadOff + 3)
+        return;
+
+    RxGroupPacket p;
+    p.receivedMs = QDateTime::currentMSecsSinceEpoch();
+    p.pathLenByte = pathLen;
+    p.hashSize = hashSize;
+    p.path = raw.mid(off + 1, pathBytes);
+    p.channelHash = quint8(raw.at(payloadOff));
+    p.cipherLen = raw.size() - payloadOff - 3;
+    p.snr = qint8(payload.at(0)) / 4.0;
+    p.rssi = qint8(payload.at(1));
+
+    // Keep only recent packets: the decrypted message follows within a
+    // second or two (PUSH_MSG_WAITING -> SYNC_NEXT_MESSAGE).
+    const qint64 cutoff = p.receivedMs - 30000;
+    while (!m_rxGroupPackets.isEmpty() && m_rxGroupPackets.first().receivedMs < cutoff)
+        m_rxGroupPackets.removeFirst();
+    if (m_rxGroupPackets.size() >= 64)
+        m_rxGroupPackets.removeFirst();
+    m_rxGroupPackets.append(p);
+}
+
+MessagePath CompanionProtocol::resolvePath(int channelIdx, quint8 pathLenByte, int textBytes)
+{
+    MessagePath mp;
+    if (pathLenByte == 0xFF) {
+        mp.direct = true;
+        return mp;
+    }
+    mp.hops = pathLenByte & 0x3F;
+    mp.hashSize = (pathLenByte >> 6) + 1;
+
+    // Candidate RX log packets: same channel hash (when known), same path_len
+    // byte, recent and not yet used. Group text plaintext is
+    // <timestamp:4> <flags:1> <"name: text">, AES-padded to 16-byte blocks,
+    // which pins the ciphertext length - preferred, but only as a tie
+    // breaker, in case a firmware pads differently. Among equal candidates the
+    // OLDEST wins: the node keeps the first copy of a flood message and drops
+    // the duplicates that arrive later via other repeaters.
+    const int expectedCipher = ((5 + textBytes + 15) / 16) * 16;
+    const bool hashKnown = m_channelHashes.contains(channelIdx);
+    const quint8 wantHash = m_channelHashes.value(channelIdx);
+    const qint64 cutoff = QDateTime::currentMSecsSinceEpoch() - 30000;
+
+    int best = -1;
+    bool bestSizeMatch = false;
+    for (int i = 0; i < m_rxGroupPackets.size(); ++i) {
+        const RxGroupPacket &p = m_rxGroupPackets.at(i);
+        if (p.used || p.receivedMs < cutoff || p.pathLenByte != pathLenByte)
+            continue;
+        if (hashKnown && p.channelHash != wantHash)
+            continue;
+        const bool sizeMatch = (p.cipherLen == expectedCipher);
+        if (best < 0 || (sizeMatch && !bestSizeMatch)) {
+            best = i;
+            bestSizeMatch = sizeMatch;
+        }
+    }
+    if (best < 0)
+        return mp;
+
+    RxGroupPacket &hit = m_rxGroupPackets[best];
+    hit.used = true;
+    // Later copies of the same message (same channel + size) are duplicates
+    // the node dropped; retire them so they cannot be matched to the next one.
+    for (RxGroupPacket &p : m_rxGroupPackets) {
+        if (!p.used && p.channelHash == hit.channelHash && p.cipherLen == hit.cipherLen
+            && p.receivedMs >= hit.receivedMs && p.receivedMs - hit.receivedMs < 10000)
+            p.used = true;
+    }
+
+    for (int i = 0; i + hit.hashSize <= hit.path.size(); i += hit.hashSize)
+        mp.hashes.append(hit.path.mid(i, hit.hashSize));
+    mp.pathKnown = true;
+    mp.snr = hit.snr;
+    mp.rssi = hit.rssi;
+    mp.radioKnown = true;
+    return mp;
+}
+
 void CompanionProtocol::handleFrame(const QByteArray &frame)
 {
     if (frame.isEmpty())
@@ -287,6 +400,7 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
     // The RX log is a firehose - every LoRa packet the node overhears. Keep it
     // out of the UI, but keep a one-line trace with the radio metadata.
     if (code == PushLogRxData) {
+        recordRxLog(payload);
         if (payload.size() >= 2) {
             const int snrQuarters = static_cast<qint8>(payload.at(0));
             const int rssi = static_cast<qint8>(payload.at(1));
@@ -326,6 +440,14 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         const QString name = QString::fromUtf8(
             nul >= 0 ? nameField.left(nul) : nameField.left(16));
         qDebug() << "Companion: channel" << idx << "=" << name;
+        // <idx:1> <name:32> <secret:16>. The on-air channel hash is the first
+        // byte of SHA-256(secret); it identifies the channel's raw packets in
+        // the RX log (verified: "#ping" -> 0x28, "#test" -> 0xd9).
+        if (payload.size() >= 1 + 32 + 16) {
+            const QByteArray secret = payload.mid(33, 16);
+            m_channelHashes[idx] = quint8(
+                QCryptographicHash::hash(secret, QCryptographicHash::Sha256).at(0));
+        }
         if (!name.isEmpty())
             emit channelInfoReceived(idx, name);
         break;
@@ -350,10 +472,13 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         // printable run instead drags timestamp bytes in: 6a cf b9 cb all
         // pass a naive "is printable" test and show up as garbage in front
         // of the message.
-        const QString text = QString::fromUtf8(payload.mid(textOffset)).trimmed();
-        qDebug() << "Companion: channel msg, idx" << idx << "text" << text;
+        const QByteArray textBytes = payload.mid(textOffset);
+        const QString text = QString::fromUtf8(textBytes).trimmed();
+        const MessagePath path = resolvePath(idx, quint8(payload.at(base + 1)), textBytes.size());
+        qDebug() << "Companion: channel msg, idx" << idx << "hops" << path.hops
+                 << (path.pathKnown ? "path known" : "path unknown") << "text" << text;
         if (!text.isEmpty())
-            emit channelMessageReceived(idx, text, ts);
+            emit channelMessageReceived(idx, text, ts, path);
         // Keep draining until the node says there is nothing left.
         syncNextMessage();
         break;

@@ -277,7 +277,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
             });
 
     connect(&m_companion, &CompanionProtocol::channelMessageReceived,
-            this, [this](int idx, const QString &text, quint32 ts) {
+            this, [this](int idx, const QString &text, quint32 ts, const MessagePath &path) {
                 // Messages from the node's offline cache can be hours old, so
                 // keep the sender's timestamp - unless the sender's clock is
                 // obviously wrong (future, or older than 30 days).
@@ -287,7 +287,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
                 const QString time =
                     QDateTime::fromSecsSinceEpoch(sent).toString(QStringLiteral("HH:mm"));
                 ++m_drainCount;
-                emit channelMessage(idx, text, time, double(sent));
+                emit channelMessage(idx, text, time, double(sent), routeInfo(path));
             });
 
     // --- node offline message queue --------------------------------------
@@ -1109,4 +1109,64 @@ QVariantList BluetoothManager::parseNodeStatus(const QByteArray &d)
     if (out.isEmpty())
         out << row(QStringLiteral("Raw"), QString::fromLatin1(d.toHex(' ')));
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// Message path presentation
+// ---------------------------------------------------------------------------
+
+QVariantMap BluetoothManager::routeInfo(const MessagePath &path) const
+{
+    // Flat strings rather than nested lists: they go straight into a QML
+    // ListModel row and into the JSON message history.
+    QString summary;
+    QStringList detail;
+
+    if (path.direct) {
+        summary = QStringLiteral("direct");
+        detail << QStringLiteral("Sent direct (routed), not flooded");
+    } else if (path.hops == 0) {
+        summary = QStringLiteral("0 hops - heard directly");
+        detail << QStringLiteral("Sender") << QStringLiteral("   ↓  no repeater")
+               << QStringLiteral("You");
+    } else {
+        const QString hopsText = path.hops == 1 ? QStringLiteral("1 hop")
+                                                : QStringLiteral("%1 hops").arg(path.hops);
+        if (!path.pathKnown) {
+            // Offline-cache messages: the raw packet was never seen.
+            summary = hopsText;
+            detail << QStringLiteral("%1 (%2-byte hashes) - route not recorded:")
+                          .arg(hopsText).arg(path.hashSize)
+                   << QStringLiteral("the message came from the node's cache, so its "
+                                     "raw packet was not seen by the app.");
+        } else {
+            QStringList hashes;
+            detail << QStringLiteral("Sender");
+            for (const QByteArray &h : path.hashes) {
+                const QString hex = QString::fromLatin1(h.toHex());
+                hashes << hex;
+                const QStringList names = m_contacts.namesForHopHash(h);
+                QString who;
+                if (names.isEmpty())
+                    who = QStringLiteral("unknown repeater");
+                else if (names.size() <= 3)
+                    who = names.join(QStringLiteral(" / "));
+                else
+                    who = QStringList(names.mid(0, 3)).join(QStringLiteral(" / "))
+                          + QStringLiteral(" / +%1").arg(names.size() - 3);
+                detail << QStringLiteral("   ↓  %1  %2").arg(hex, who);
+            }
+            detail << QStringLiteral("You");
+            summary = hopsText + QStringLiteral(" · ") + hashes.join(QStringLiteral(" › "));
+        }
+    }
+    if (path.radioKnown)
+        detail << QStringLiteral("Last hop: SNR %1 dB, RSSI %2 dBm")
+                      .arg(path.snr, 0, 'f', 1).arg(path.rssi);
+
+    return QVariantMap{
+        { QStringLiteral("hops"),        path.direct ? -1 : path.hops },
+        { QStringLiteral("route"),       summary },
+        { QStringLiteral("routeDetail"), detail.join(QLatin1Char('\n')) }
+    };
 }

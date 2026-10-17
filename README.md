@@ -23,6 +23,10 @@ the mesh.
   fetched on connect, when the app returns to the foreground, and by a
   once-a-minute safety poll. They keep their original send time (with date if
   older than today), and the Messages page reports how many were fetched.
+- **Message path** — each received channel message shows its route
+  (`↳ 2 hops · 2a67 › 6228`); tap it for the hop-by-hop path with repeater
+  names from the contact list and the SNR/RSSI of the last hop. Messages
+  from the node's offline cache show the hop count only (see below).
 - **Contacts** — the node's live contact table, built from received adverts
   and refreshed automatically when new adverts arrive. Shows type (repeater,
   companion, room), hops, last heard and an active indicator. Filters: type,
@@ -49,6 +53,7 @@ the mesh.
 | Per-channel view, persistent history | working |
 | Offline message queue | working (verified on a live node) |
 | Contacts from adverts, favourites | working |
+| Message path (hops, route, repeater names) | implemented; matching to the raw packet not yet confirmed on a live message |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
 | Direct (contact) messages | received and decoded, no UI yet |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
@@ -183,7 +188,30 @@ The text is `"<sender name>: <message>"`. Do not search backwards for the
 trailing printable run either: timestamp bytes such as `6a cf b9 cb` pass a
 naive printable test and end up prepended to the message.
 
-**`0x12` channel entry** — `<index:1> <name, NUL-terminated> <secret:32>`.
+**Message path.** The channel message frame only carries the raw `path_len`
+byte — `0bSSCCCCCC`, hop count plus hash size − 1 (so `0x42` = 2 hops with
+2-byte hashes), `0xFF` = sent direct. The hop hashes come from the raw packet
+in the `0x88` RX log:
+
+```
+<header: 0bVVTTTTRR> [transport codes:4 if RR = 0 or 3] <path_len> <path> <payload>
+GRP_TXT (TTTT = 5) payload: <channel_hash:1> <mac:2> <ciphertext>
+```
+
+The app keeps the last 30 s of `GRP_TXT` packets and matches a decrypted
+message to one by channel hash, identical `path_len` byte and ciphertext
+length (`ceil((5 + text bytes) / 16) × 16`, used as a tie breaker). The
+*oldest* candidate wins — the node keeps the first copy of a flood message —
+and later copies of the same message are retired. Each hop hash is a prefix of
+a repeater's public key; with 1-byte hashes several contacts can match, and
+all candidates are shown. Messages fetched from the offline queue have no RX
+log entry, so only the hop count is known.
+
+The channel hash is the first byte of SHA-256 over the 16-byte channel secret
+from `0x12` (verified: `#ping` → `0x28`, `#test` → `0xd9`; for hashtag
+channels the secret is the first 16 bytes of SHA-256 of the name).
+
+**`0x12` channel entry** — `<index:1> <name:32> <secret:16>`.
 The name field is fixed width and is *not* zeroed by the firmware; channel 1
 carried a stray `63` ('c') from a previous name after its NUL. Cut at the first
 NUL, never read to the end of the payload.

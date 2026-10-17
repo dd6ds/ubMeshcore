@@ -167,8 +167,9 @@ signals:
     void channelsChanged();
     void trafficLogChanged();
     /// timestamp = sender's send time (epoch secs), sanity-checked.
+    /// route = { hops, route (one-line summary), routeDetail (multi-line) }.
     void channelMessage(int channelIdx, const QString &text, const QString &time,
-                        double timestamp);
+                        double timestamp, const QVariantMap &route);
     void syncInfoChanged();
     void sendFailed(const QString &reason);
     void contactsSyncingChanged();
@@ -256,6 +257,7 @@ private:
     bool checkSession();
     QString keyHexForPrefix(const QByteArray &prefix) const;
     static QVariantList parseNodeStatus(const QByteArray &data);
+    QVariantMap routeInfo(const MessagePath &path) const;
     void writeToUart(const QByteArray &data);
     void appendTraffic(const QString &line);
 };

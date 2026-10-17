@@ -208,6 +208,25 @@ const MeshContact *ContactListModel::findByPrefix(const QByteArray &prefix) cons
     return nullptr;
 }
 
+QStringList ContactListModel::namesForHopHash(const QByteArray &hash) const
+{
+    QStringList forwarders, others;
+    if (hash.isEmpty())
+        return forwarders;
+    for (const MeshContact &c : m_contacts) {
+        if (!c.publicKey.startsWith(hash))
+            continue;
+        const QString n = c.name.isEmpty() ? QString::fromLatin1(c.publicKey.left(4).toHex())
+                                           : c.name;
+        if (c.type == 2 || c.type == 3)
+            forwarders << n;
+        else
+            others << n;
+    }
+    // Companions do not repeat; only fall back to them if nothing else fits.
+    return forwarders.isEmpty() ? others : forwarders;
+}
+
 const MeshContact *ContactListModel::findByKeyHex(const QString &hex) const
 {
     return findByPrefix(QByteArray::fromHex(hex.toLatin1()));
