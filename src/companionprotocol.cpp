@@ -46,6 +46,7 @@ QString CompanionProtocol::commandName(quint8 code)
     case CmdSendLogin:         return QStringLiteral("SEND_LOGIN");
     case CmdSendStatusReq:     return QStringLiteral("SEND_STATUS_REQ");
     case CmdGetChannel:        return QStringLiteral("GET_CHANNEL");
+    case CmdSetChannel:        return QStringLiteral("SET_CHANNEL");
     default:
         return QStringLiteral("CMD(0x%1)").arg(code, 2, 16, QLatin1Char('0'));
     }
@@ -68,6 +69,7 @@ QString CompanionProtocol::responseName(quint8 code)
     case RespChannelMsgRecv: return QStringLiteral("CHANNEL_MSG_RECV_8");
     case RespCurrTime:       return QStringLiteral("CURR_TIME");
     case RespNoMoreMessages: return QStringLiteral("NO_MORE_MESSAGES");
+    case RespDeviceInfo:     return QStringLiteral("DEVICE_INFO");
     case PushAdvert:         return QStringLiteral("PUSH_ADVERT");
     case PushPathUpdated:    return QStringLiteral("PUSH_PATH_UPDATED");
     case PushSendConfirmed:  return QStringLiteral("PUSH_SEND_CONFIRMED");
@@ -130,6 +132,35 @@ void CompanionProtocol::requestChannel(int channelIdx)
     frame.append(char(CmdGetChannel));
     frame.append(char(channelIdx & 0xFF));
     emitFrame(frame);
+}
+
+void CompanionProtocol::sendDeviceQuery()
+{
+    QByteArray frame;
+    frame.append(char(CmdDeviceQuery));
+    frame.append(char(3));          // app protocol version we understand
+    emitFrame(frame);
+}
+
+void CompanionProtocol::setChannel(int channelIdx, const QString &name,
+                                   const QByteArray &secret16)
+{
+    // 20 <idx> <name:32, NUL-padded> <secret:16>  = 50 bytes
+    QByteArray nameField = name.toUtf8().left(31);   // keep a terminating NUL
+    nameField.append(32 - nameField.size(), char(0));
+    QByteArray secret = secret16.left(16);
+    secret.append(16 - secret.size(), char(0));
+
+    QByteArray frame;
+    frame.append(char(CmdSetChannel));
+    frame.append(char(channelIdx & 0xFF));
+    frame.append(nameField);
+    frame.append(secret);
+    // Not emitFrame(): the secret must not end up in the traffic log.
+    emit traffic(QStringLiteral("TX SET_CHANNEL: %1 \"%2\" <secret hidden>")
+                     .arg(channelIdx).arg(name));
+    qDebug() << "Companion TX SET_CHANNEL" << channelIdx << name;
+    emit writeRequested(frame);
 }
 
 void CompanionProtocol::requestContacts(quint32 since)
@@ -443,13 +474,25 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         // <idx:1> <name:32> <secret:16>. The on-air channel hash is the first
         // byte of SHA-256(secret); it identifies the channel's raw packets in
         // the RX log (verified: "#ping" -> 0x28, "#test" -> 0xd9).
-        if (payload.size() >= 1 + 32 + 16) {
+        if (!name.isEmpty() && payload.size() >= 1 + 32 + 16) {
             const QByteArray secret = payload.mid(33, 16);
             m_channelHashes[idx] = quint8(
                 QCryptographicHash::hash(secret, QCryptographicHash::Sha256).at(0));
+        } else {
+            m_channelHashes.remove(idx);
         }
-        if (!name.isEmpty())
-            emit channelInfoReceived(idx, name);
+        // Empty slots are reported too, so the app knows which are free.
+        emit channelInfoReceived(idx, name);
+        break;
+    }
+
+    case RespDeviceInfo: {
+        // <fw_ver:1> [v3+: <max_contacts/2:1> <max_channels:1> <ble_pin:4> ...]
+        const int fwVer = payload.isEmpty() ? 0 : int(quint8(payload.at(0)));
+        const int maxChannels = (fwVer >= 3 && payload.size() >= 3)
+                                    ? int(quint8(payload.at(2))) : 0;
+        qDebug() << "Companion: DEVICE_INFO fw" << fwVer << "max channels" << maxChannels;
+        emit deviceInfoReceived(fwVer, maxChannels);
         break;
     }
 
@@ -553,9 +596,23 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         emit sendAcknowledged();
         break;
 
-    case RespErr:
-        emit errorReported(QStringLiteral("Node rejected the last command"));
+    case RespErr: {
+        const int err = payload.isEmpty() ? 0 : int(quint8(payload.at(0)));
+        QString why;
+        switch (err) {
+        case 1: why = QStringLiteral("unsupported command"); break;
+        case 2: why = QStringLiteral("not found"); break;
+        case 3: why = QStringLiteral("table full"); break;
+        case 4: why = QStringLiteral("bad state"); break;
+        case 5: why = QStringLiteral("storage error"); break;
+        case 6: why = QStringLiteral("illegal argument"); break;
+        default: break;
+        }
+        emit errorReported(why.isEmpty()
+                               ? QStringLiteral("Node rejected the last command")
+                               : QStringLiteral("Node rejected the last command (%1)").arg(why));
         break;
+    }
 
     case PushMsgWaiting:
         // The node is holding a message for us - go fetch it.

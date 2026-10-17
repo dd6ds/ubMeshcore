@@ -19,6 +19,12 @@ the mesh.
 - **Channels** — read and send messages per channel. Each channel shows only
   its own messages; the history is stored on the phone and survives
   disconnects and app restarts. The last opened channel is reopened on start.
+- **Add / remove channels** — type a hashtag channel (`#z46` or `z46`) and
+  tap *Add*; it is written into the first free slot on the node (secret
+  derived from the name, as in every MeshCore client). A name that already
+  exists shows *Open* instead. *✕* on a channel row removes it from the node
+  after a confirmation, together with its history in the app. Tapping a row
+  opens the channel. The page shows how many of the node's slots are used.
 - **Unread indicators** — new messages in a channel you are not reading
   show a red count badge on that channel's row ("3 new messages"), a total
   on the *Channels* buttons, and on *‹ Channels* inside a channel for unread
@@ -60,6 +66,7 @@ the mesh.
 | Contacts from adverts, favourites | working |
 | Message path (hops, route, repeater names) | working (verified on live messages) |
 | Unread indicators per channel | working |
+| Add / remove hashtag channels | implemented, not yet tested on the node; private (random-key) channels not supported yet |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
 | Direct (contact) messages | received and decoded, no UI yet |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
@@ -166,7 +173,9 @@ Commands sent by the app:
 | `0x0a` | `SYNC_NEXT_MESSAGE` | — |
 | `0x1a` | `SEND_LOGIN` | `<pub_key:32> <password, max 15>` (never written to the trace) |
 | `0x1b` | `SEND_STATUS_REQ` | `<pub_key:32>` |
-| `0x1f` | `GET_CHANNEL` | `<index>` |
+| `0x16` | `DEVICE_QUERY` | `<app protocol version = 3>` — reply carries `max_channels` |
+| `0x1f` | `GET_CHANNEL` | `<index>` — sent for every slot `0 .. max_channels-1` |
+| `0x20` | `SET_CHANNEL` | `<index> <name:32, NUL-padded> <secret:16>`; empty name + zero secret deletes (secret never written to the trace) |
 
 Frames received (verified against a live node, `DD6DS-Mobile`, unless noted):
 
@@ -178,6 +187,7 @@ Frames received (verified against a live node, `DD6DS-Mobile`, unless noted):
 | `0x07` / `0x10` | Contact message v1 / v3 (v3 adds `<snr> <reserved:2>` in front) |
 | `0x08` / `0x11` | Channel message v1 / v3 — see below |
 | `0x0a` | `NO_MORE_MESSAGES` — the node's offline queue is empty |
+| `0x0d` | `DEVICE_INFO` — `<fw_ver> [v3+: <max_contacts/2> <max_channels> ...]` |
 | `0x12` | Channel table entry |
 | `0x80` / `0x81` | Advert / path updated — `<pub_key:32>`; triggers an incremental contact sync |
 | `0x83` | Message waiting (1 byte); answer with `SYNC_NEXT_MESSAGE` |
@@ -224,6 +234,14 @@ log entry, so only the hop count is known.
 The channel hash is the first byte of SHA-256 over the 16-byte channel secret
 from `0x12` (verified: `#ping` → `0x28`, `#test` → `0xd9`; for hashtag
 channels the secret is the first 16 bytes of SHA-256 of the name).
+
+**Channel slots.** The node has `max_channels` slots (1, 8 or 40 depending on
+the board). All of them are read on connect, empty ones included, so the app
+knows the free slots; empty slots are hidden in the list. A new channel goes
+into the first free slot. Message history is keyed by slot index, so adding
+into or removing a slot also clears that slot's history and unread count in
+the app. Outgoing frames are paced (≥ 40 ms apart): the firmware handles one
+command at a time, and reading 40 slots back to back could overrun it.
 
 **`0x12` channel entry** — `<index:1> <name:32> <secret:16>`.
 The name field is fixed width and is *not* zeroed by the firmware; channel 1

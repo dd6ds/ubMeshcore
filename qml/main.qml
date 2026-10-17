@@ -48,6 +48,18 @@ ApplicationWindow {
                 rootWindow.bumpUnread(channelIdx)
         }
         onSendFailed: rootWindow.addLocalMessage("!", reason)
+        // History is keyed by slot index: when a slot gets a new channel or
+        // is emptied, the old channel's messages must not show up under it.
+        onChannelSlotCleared: rootWindow.clearChannelHistory(channelIdx)
+    }
+
+    function clearChannelHistory(idx) {
+        for (var i = messageList.count - 1; i >= 0; --i) {
+            if (messageList.get(i).channel === idx)
+                messageList.remove(i)
+        }
+        MessageStore.clear(idx)
+        markRead(idx)
     }
 
     // Every message carries the channel it belongs to; the Messages page only
@@ -443,13 +455,92 @@ ApplicationWindow {
                         placeholderText: "Channel name, e.g. #p53"
                         font.pixelSize: rootWindow.fontBody
                         Layout.fillWidth: true
-                        // Typing a name picks the matching channel from the
-                        // node's table, so the field is a shortcut rather than
-                        // a dead end.
-                        onTextChanged: {
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                        onAccepted: openOrAddButton.clicked()
+                    }
+
+                    // What the field refers to. A typed name that is not on the
+                    // node must NOT fall back to the previously selected
+                    // channel - that opened the wrong channel's messages.
+                    property string typedName: BluetoothManager.normalizeChannelName(channelInput.text)
+                    property int typedIdx: {
+                        BluetoothManager.channelNames   // re-evaluate on changes
+                        return BluetoothManager.channelIndexOf(typedName)
+                    }
+
+                    Button {
+                        id: openOrAddButton
+                        readonly property bool typing: channelInput.text.trim().length > 0
+                        text: !typing
+                              ? (rootWindow.currentChannelIdx >= 0
+                                 ? "Open " + rootWindow.currentChannelName : "Pick a channel")
+                              : channelColumn.typedName.length === 0
+                                ? "Invalid channel name"
+                                : channelColumn.typedIdx >= 0
+                                  ? "Open " + channelColumn.typedName
+                                  : "Add " + channelColumn.typedName
+                        enabled: !typing ? rootWindow.currentChannelIdx >= 0
+                                         : channelColumn.typedName.length > 0
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: Math.round(rootWindow.gu * 22)
+                        Layout.preferredHeight: Math.round(rootWindow.gu * 5)
+                        onClicked: {
+                            var idx = rootWindow.currentChannelIdx
+                            var name = rootWindow.currentChannelName
+                            if (typing) {
+                                name = channelColumn.typedName
+                                idx = channelColumn.typedIdx
+                                if (idx < 0)
+                                    idx = BluetoothManager.addChannel(name)   // reason via sendFailed
+                                if (idx < 0) {
+                                    channelStatus.text = channelStatus.lastError
+                                    return
+                                }
+                            }
+                            rootWindow.currentChannelIdx = idx
+                            rootWindow.currentChannelName = name
+                            channelInput.text = ""
+                            channelStatus.text = ""
+                            Qt.inputMethod.hide()
+                            mainStack.currentIndex = 3
+                        }
+                    }
+
+                    AppLabel {
+                        id: channelStatus
+                        property string lastError: ""
+                        Layout.fillWidth: true
+                        visible: text.length > 0
+                        color: "#b00"
+                        wrapMode: Text.Wrap
+                        font.pixelSize: rootWindow.fontSecondary
+                        Connections {
+                            target: BluetoothManager
+                            onSendFailed: channelStatus.lastError = reason
+                        }
+                    }
+
+                    // As soon as the node's channel table arrives, preselect
+                    // the first entry so the page is immediately usable.
+                    Connections {
+                        target: BluetoothManager
+                        onChannelsChanged: {
                             var names = BluetoothManager.channelNames
+                            var cur = rootWindow.currentChannelIdx
+                            // Slots are still being read after a connect: an
+                            // unread slot is not "empty", leave the selection.
+                            if (cur >= 0 && cur >= names.length)
+                                return
+                            var curValid = cur >= 0 && names[cur].length > 0
+                            if (curValid) {
+                                // Keep the name in sync with the node.
+                                rootWindow.currentChannelName = names[cur]
+                                return
+                            }
+                            // No selection, or its slot was emptied:
+                            // fall back to the first channel the node has.
                             for (var i = 0; i < names.length; ++i) {
-                                if (names[i].toLowerCase() === text.toLowerCase().trim()) {
+                                if (names[i].length > 0) {
                                     rootWindow.currentChannelIdx = i
                                     rootWindow.currentChannelName = names[i]
                                     return
@@ -458,37 +549,19 @@ ApplicationWindow {
                         }
                     }
 
-                    Button {
-                        text: rootWindow.currentChannelIdx >= 0
-                              ? "Open " + rootWindow.currentChannelName
-                              : "Pick a channel"
-                        enabled: rootWindow.currentChannelIdx >= 0
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.round(rootWindow.gu * 22)
-                        Layout.preferredHeight: Math.round(rootWindow.gu * 5)
-                        onClicked: mainStack.currentIndex = 3
-                    }
-
-                    // As soon as the node's channel table arrives, preselect
-                    // the first entry so the page is immediately usable.
-                    Connections {
-                        target: BluetoothManager
-                        onChannelsChanged: {
-                            console.log("channelNames from C++:",
-                                        JSON.stringify(BluetoothManager.channelNames))
-                            if (rootWindow.currentChannelIdx < 0
-                                && BluetoothManager.channelNames.length > 0) {
-                                rootWindow.currentChannelIdx = 0
-                                rootWindow.currentChannelName =
-                                    BluetoothManager.channelNames[0]
-                            }
-                        }
-                    }
-
                     AppLabel {
-                        text: BluetoothManager.channelNames.length > 0
-                              ? "Channels on " + BluetoothManager.nodeName + ":"
-                              : "Waiting for the channel list from the node..."
+                        text: {
+                            var names = BluetoothManager.channelNames
+                            if (names.length === 0)
+                                return "Waiting for the channel list from the node..."
+                            var used = 0
+                            for (var i = 0; i < names.length; ++i)
+                                if (names[i].length > 0) ++used
+                            return "Channels on " + BluetoothManager.nodeName
+                                    + (BluetoothManager.maxChannels > 0
+                                       ? " (" + used + " of " + BluetoothManager.maxChannels + " slots used):"
+                                       : ":")
+                        }
                         color: "#666"
                         font.pixelSize: rootWindow.fontSecondary
                         Layout.fillWidth: true
@@ -501,6 +574,9 @@ ApplicationWindow {
                         // invented channels that cannot be opened.
                         model: BluetoothManager.channelNames
                         delegate: Rectangle {
+                            // Empty slots are part of the list (so free slots
+                            // are known) but are not shown.
+                            visible: String(modelData).length > 0
                             Layout.fillWidth: true
                             Layout.preferredHeight: Math.round(rootWindow.gu * 7)
                             radius: Math.round(rootWindow.gu * 0.5)
@@ -538,19 +614,50 @@ ApplicationWindow {
                                 id: channelBadge
                                 count: rootWindow.unreadFor(index)
                                 anchors.verticalCenter: parent.verticalCenter
+                                anchors.right: removeChannelButton.left
+                                anchors.rightMargin: rootWindow.spacingUnit
+                            }
+                            // Remove. z: 2 keeps it above the row-wide
+                            // MouseArea declared below it.
+                            Rectangle {
+                                id: removeChannelButton
+                                z: 2
+                                width: Math.round(rootWindow.gu * 4.5)
+                                height: width
+                                radius: width / 2
+                                anchors.verticalCenter: parent.verticalCenter
                                 anchors.right: parent.right
                                 anchors.rightMargin: rootWindow.spacingUnit
+                                color: removeMouse.pressed ? "#ffcdd2" : "transparent"
+                                border.color: "#e57373"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✕"
+                                    color: "#c62828"
+                                    font.pixelSize: Math.round(rootWindow.gu * 2)
+                                }
+                                MouseArea {
+                                    id: removeMouse
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        removeDialog.channelIdx = index
+                                        removeDialog.channelName = String(modelData)
+                                        removeDialog.open()
+                                    }
+                                }
                             }
                             MouseArea {
                                 id: channelMouse
                                 anchors.fill: parent
+                                // Tap opens the channel directly.
                                 onClicked: {
-                                    console.log("channel selected:", index, modelData)
                                     rootWindow.currentChannelIdx = index
-                                    rootWindow.currentChannelName =
-                                        (modelData && modelData.length > 0)
-                                            ? modelData : "Channel " + index
-                                    channelInput.text = rootWindow.currentChannelName
+                                    rootWindow.currentChannelName = String(modelData)
+                                    channelInput.text = ""
+                                    channelStatus.text = ""
+                                    Qt.inputMethod.hide()
+                                    mainStack.currentIndex = 3
                                 }
                             }
                         }
@@ -566,6 +673,32 @@ ApplicationWindow {
             }
             
             property string connectedNode: ""
+
+            // Removing a channel changes the node's configuration, so ask.
+            Dialog {
+                id: removeDialog
+                property int channelIdx: -1
+                property string channelName: ""
+                modal: true
+                width: Math.min(parent.width - 2 * rootWindow.spacingUnit,
+                                Math.round(rootWindow.gu * 40))
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 3
+                title: "Remove channel"
+                standardButtons: Dialog.Yes | Dialog.Cancel
+                contentItem: AppLabel {
+                    wrapMode: Text.Wrap
+                    text: "Remove " + removeDialog.channelName + " from your node?\n\n"
+                          + "Its message history in the app is deleted too. You can add "
+                          + "the channel again later by typing its name."
+                }
+                onAccepted: {
+                    if (BluetoothManager.removeChannel(channelIdx))
+                        channelStatus.text = ""
+                    else
+                        channelStatus.text = channelStatus.lastError
+                }
+            }
         }
         
         // Page 4: Messages

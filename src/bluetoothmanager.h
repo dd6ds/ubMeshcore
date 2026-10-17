@@ -98,6 +98,7 @@ class BluetoothManager : public QObject
     Q_PROPERTY(bool contactsSyncing READ contactsSyncing NOTIFY contactsSyncingChanged)
     /// e.g. "3 message(s) fetched from node at 08:31" - last offline-queue drain.
     Q_PROPERTY(QString lastSyncInfo READ lastSyncInfo NOTIFY syncInfoChanged)
+    Q_PROPERTY(int maxChannels READ maxChannels NOTIFY channelsChanged)
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
@@ -142,6 +143,21 @@ public:
     Q_INVOKABLE bool sendNodeCommand(const QString &keyHex, const QString &command);
     Q_INVOKABLE bool sendDirectMessage(const QString &keyHex, const QString &text);
 
+    // --- channel management -------------------------------------------------
+    /// Adds a hashtag channel ("#z46" or "z46") in the first free slot; the
+    /// secret is derived from the name like every MeshCore client does
+    /// (first 16 bytes of SHA-256("#name")). Returns the slot index, the
+    /// existing index if the channel is already there, or -1 on error
+    /// (reason via sendFailed).
+    Q_INVOKABLE int addChannel(const QString &name);
+    /// Clears a channel slot on the node (empty name, all-zero secret).
+    Q_INVOKABLE bool removeChannel(int channelIdx);
+    /// Slot index of a channel by name (case-sensitive), -1 if not present.
+    Q_INVOKABLE int channelIndexOf(const QString &name) const;
+    /// "#name" form of user input, or "" if it is not a usable channel name.
+    Q_INVOKABLE QString normalizeChannelName(const QString &name) const;
+    int maxChannels() const { return m_maxChannels; }
+
     Q_INVOKABLE void selectDevice(const QString &address, const QString &name);
     Q_INVOKABLE bool connectToSelected();
     /// Sends a text message on a channel via the companion protocol.
@@ -171,6 +187,9 @@ signals:
     void channelMessage(int channelIdx, const QString &text, const QString &time,
                         double timestamp, const QVariantMap &route);
     void syncInfoChanged();
+    /// A channel slot was added or removed: any stored history and unread
+    /// count for that index belong to the previous channel and must go.
+    void channelSlotCleared(int channelIdx);
     void sendFailed(const QString &reason);
     void contactsSyncingChanged();
     void nodeLoginResult(const QString &keyHex, bool success, bool isAdmin);
@@ -253,6 +272,13 @@ private:
     bool m_reportDrain = false;         // drain started by us (connect/resume/poll)
     QString m_lastSyncInfo;
     QTimer m_messagePollTimer;          // safety poll of the node's queue
+
+    int m_maxChannels = 0;              // from DEVICE_INFO; 0 = unknown
+    QList<QByteArray> m_writeQueue;     // paced outgoing frames
+    QTimer m_writeTimer;
+    static constexpr int kWriteGapMs = 40;
+    void flushWriteQueue();
+    void requestAllChannels(int count);
 
     bool checkSession();
     QString keyHexForPrefix(const QByteArray &prefix) const;

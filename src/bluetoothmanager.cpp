@@ -1,6 +1,7 @@
 #include "bluetoothmanager.h"
 
 #include <QBluetoothUuid>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QLowEnergyDescriptor>
 #include <QDBusArgument>
@@ -196,9 +197,17 @@ BluetoothManager::BluetoothManager(QObject *parent)
                                        ? QStringLiteral("Session started")
                                        : QStringLiteral("Session started - ") + name);
                 emit connectionChanged();
-                // Ask for the channel table and drain anything queued.
-                for (int i = 0; i < 4; ++i)
-                    m_companion.requestChannel(i);
+                // Ask how many channel slots the node has; the reply then
+                // triggers reading every slot (see deviceInfoReceived). If an
+                // old firmware does not answer, fall back to the first 4.
+                m_maxChannels = 0;
+                m_channelNames.clear();
+                emit channelsChanged();
+                m_companion.sendDeviceQuery();
+                QTimer::singleShot(2500, this, [this]() {
+                    if (m_sessionReady && m_maxChannels == 0)
+                        requestAllChannels(4);
+                });
                 // Fetch everything the node cached while we were away.
                 syncNextMessage();
                 // Align the node clock first: it stamps lastmod on every
@@ -272,8 +281,18 @@ BluetoothManager::BluetoothManager(QObject *parent)
             this, [this](int idx, const QString &name) {
                 while (m_channelNames.size() <= idx)
                     m_channelNames.append(QString());
+                if (m_channelNames.at(idx) == name)
+                    return;
                 m_channelNames[idx] = name;
                 emit channelsChanged();
+            });
+    connect(&m_companion, &CompanionProtocol::deviceInfoReceived,
+            this, [this](int, int maxChannels) {
+                if (maxChannels <= 0 || m_maxChannels > 0)
+                    return;
+                m_maxChannels = maxChannels;
+                emit channelsChanged();
+                requestAllChannels(maxChannels);
             });
 
     connect(&m_companion, &CompanionProtocol::channelMessageReceived,
@@ -316,6 +335,10 @@ BluetoothManager::BluetoothManager(QObject *parent)
             syncNextMessage();
     });
     m_messagePollTimer.start();
+
+    m_writeTimer.setSingleShot(true);
+    m_writeTimer.setInterval(kWriteGapMs);
+    connect(&m_writeTimer, &QTimer::timeout, this, &BluetoothManager::flushWriteQueue);
 
     connect(&m_companion, &CompanionProtocol::errorReported,
             this, [this](const QString &what) { emit sendFailed(what); });
@@ -713,6 +736,8 @@ void BluetoothManager::onControllerDisconnected()
     m_sessionReady = false;
     m_nodeName.clear();
     m_contactRefreshDebounce.stop();
+    m_writeQueue.clear();
+    m_writeTimer.stop();
     if (m_contactsSyncing) {
         m_contactsSyncing = false;
         emit contactsSyncingChanged();
@@ -816,12 +841,36 @@ void BluetoothManager::writeToUart(const QByteArray &data)
         return;
     }
 
+    // Pace the writes: the companion firmware handles one command at a time,
+    // and a burst (e.g. reading 40 channel slots) written back to back can
+    // overrun it. Frames go out in order, at least kWriteGapMs apart.
+    m_writeQueue.append(data);
+    if (!m_writeTimer.isActive())
+        flushWriteQueue();
+}
+
+void BluetoothManager::flushWriteQueue()
+{
+    if (m_writeQueue.isEmpty())
+        return;
+    if (!m_uartService || !m_rxCharacteristic.isValid()) {
+        m_writeQueue.clear();
+        return;
+    }
+    const QByteArray data = m_writeQueue.takeFirst();
     const QLowEnergyService::WriteMode mode =
         (m_rxCharacteristic.properties() & QLowEnergyCharacteristic::WriteNoResponse)
             ? QLowEnergyService::WriteWithoutResponse
             : QLowEnergyService::WriteWithResponse;
-
     m_uartService->writeCharacteristic(m_rxCharacteristic, data, mode);
+    m_writeTimer.start();   // single shot; fires flushWriteQueue for the next
+}
+
+void BluetoothManager::requestAllChannels(int count)
+{
+    qDebug() << "BluetoothManager: reading" << count << "channel slot(s)";
+    for (int i = 0; i < count; ++i)
+        m_companion.requestChannel(i);
 }
 
 void BluetoothManager::appendTraffic(const QString &line)
@@ -1169,4 +1218,103 @@ QVariantMap BluetoothManager::routeInfo(const MessagePath &path) const
         { QStringLiteral("route"),       summary },
         { QStringLiteral("routeDetail"), detail.join(QLatin1Char('\n')) }
     };
+}
+
+// ---------------------------------------------------------------------------
+// Channel management
+// ---------------------------------------------------------------------------
+
+QString BluetoothManager::normalizeChannelName(const QString &input) const
+{
+    QString name = input.trimmed();
+    if (name.isEmpty())
+        return QString();
+    if (!name.startsWith(QLatin1Char('#')))
+        name.prepend(QLatin1Char('#'));
+    // Hashtag names are case-sensitive in MeshCore ("#P53" != "#p53"), so the
+    // case is kept as typed. 31 bytes leave room for the terminating NUL.
+    if (name.size() < 2 || name.toUtf8().size() > 31 || name.contains(QLatin1Char(' ')))
+        return QString();
+    return name;
+}
+
+int BluetoothManager::channelIndexOf(const QString &name) const
+{
+    if (name.isEmpty())
+        return -1;
+    for (int i = 0; i < m_channelNames.size(); ++i) {
+        if (m_channelNames.at(i) == name)
+            return i;
+    }
+    return -1;
+}
+
+int BluetoothManager::addChannel(const QString &input)
+{
+    if (!checkSession())
+        return -1;
+    const QString name = normalizeChannelName(input);
+    if (name.isEmpty()) {
+        emit sendFailed(QStringLiteral("\"%1\" is not a valid channel name").arg(input));
+        return -1;
+    }
+    const int existing = channelIndexOf(name);
+    if (existing >= 0)
+        return existing;
+    if (m_maxChannels <= 0) {
+        emit sendFailed(QStringLiteral("Channel slots not read yet - try again in a moment"));
+        return -1;
+    }
+
+    int slot = -1;
+    for (int i = 0; i < m_maxChannels; ++i) {
+        if (i >= m_channelNames.size() || m_channelNames.at(i).isEmpty()) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        emit sendFailed(QStringLiteral("All %1 channel slots are in use - remove one first")
+                            .arg(m_maxChannels));
+        return -1;
+    }
+
+    // Hashtag channel key = first 16 bytes of SHA-256 over the name incl. '#'
+    // (verified against the node: "#ping", "#test").
+    const QByteArray secret =
+        QCryptographicHash::hash(name.toUtf8(), QCryptographicHash::Sha256).left(16);
+    m_companion.setChannel(slot, name, secret);
+    // Read the slot back: commands run in order, so this returns the new
+    // state (and the protocol learns the channel hash for message paths).
+    m_companion.requestChannel(slot);
+
+    while (m_channelNames.size() <= slot)
+        m_channelNames.append(QString());
+    m_channelNames[slot] = name;
+    emit channelSlotCleared(slot);
+    emit channelsChanged();
+    qDebug() << "BluetoothManager: added channel" << name << "in slot" << slot;
+    return slot;
+}
+
+bool BluetoothManager::removeChannel(int channelIdx)
+{
+    if (!checkSession())
+        return false;
+    if (channelIdx < 0 || channelIdx >= m_channelNames.size()
+        || m_channelNames.at(channelIdx).isEmpty()) {
+        emit sendFailed(QStringLiteral("No channel in that slot"));
+        return false;
+    }
+    const QString name = m_channelNames.at(channelIdx);
+    // Empty name + all-zero secret is the documented "delete" form. (A NAMED
+    // slot with a zero secret would instead receive null-key traffic.)
+    m_companion.setChannel(channelIdx, QString(), QByteArray(16, char(0)));
+    m_companion.requestChannel(channelIdx);
+
+    m_channelNames[channelIdx] = QString();
+    emit channelSlotCleared(channelIdx);
+    emit channelsChanged();
+    qDebug() << "BluetoothManager: removed channel" << name << "from slot" << channelIdx;
+    return true;
 }

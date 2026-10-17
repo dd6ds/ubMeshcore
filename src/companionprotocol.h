@@ -54,7 +54,8 @@ public:
         CmdDeviceQuery       = 22,
         CmdSendLogin         = 26,
         CmdSendStatusReq     = 27,
-        CmdGetChannel        = 31
+        CmdGetChannel        = 31,
+        CmdSetChannel        = 32
     };
 
     enum TxtType : quint8 {
@@ -75,6 +76,7 @@ public:
         RespChannelMsgRecv = 8,
         RespCurrTime       = 9,
         RespNoMoreMessages = 10,
+        RespDeviceInfo     = 13,
         // Verified on a live DD6DS-Mobile node: channel messages come back as
         // 0x11 and the channel table as 0x12, not as the lower numbers the
         // rest of this enum would suggest.
@@ -102,6 +104,11 @@ public:
     // --- commands (phone -> node) -----------------------------------------
     void sendAppStart(const QString &appName);
     void requestChannel(int channelIdx);
+    /// CMD_DEVICE_QUERY (app protocol v3) -> RESP_DEVICE_INFO with max_channels.
+    void sendDeviceQuery();
+    /// CMD_SET_CHANNEL: <idx> <name:32, NUL-padded> <secret:16>. An empty name
+    /// with an all-zero secret deletes the slot.
+    void setChannel(int channelIdx, const QString &name, const QByteArray &secret16);
     /// since = most_recent_lastmod of the previous sync, 0 for a full sync.
     void requestContacts(quint32 since = 0);
     void syncNextMessage();
@@ -132,6 +139,8 @@ signals:
     void writeRequested(const QByteArray &data);
 
     void selfInfoReceived(const QString &name);
+    void deviceInfoReceived(int firmwareVersion, int maxChannels);
+    /// Emitted for empty slots too (name empty), so free slots are known.
     void channelInfoReceived(int channelIdx, const QString &name);
     void channelMessageReceived(int channelIdx, const QString &text, quint32 timestamp,
                                 const MessagePath &path);
