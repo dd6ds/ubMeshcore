@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QString>
 #include <QTimer>
+#include <QVariant>
 #include <QVector>
 
 #include "companionprotocol.h"
@@ -92,6 +93,11 @@ class BluetoothManager : public QObject
     Q_PROPERTY(bool sessionReady READ sessionReady NOTIFY nodeInfoChanged)
     Q_PROPERTY(QStringList channelNames READ channelNames NOTIFY channelsChanged)
     Q_PROPERTY(QStringList trafficLog READ trafficLog NOTIFY trafficLogChanged)
+    // Contact table of the connected node, filled from received adverts.
+    Q_PROPERTY(ContactListModel *contactsModel READ contactsModel CONSTANT)
+    Q_PROPERTY(bool contactsSyncing READ contactsSyncing NOTIFY contactsSyncingChanged)
+    /// e.g. "3 message(s) fetched from node at 08:31" - last offline-queue drain.
+    Q_PROPERTY(QString lastSyncInfo READ lastSyncInfo NOTIFY syncInfoChanged)
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
@@ -117,11 +123,31 @@ public:
     bool sessionReady() const { return m_sessionReady; }
     QStringList channelNames() const { return m_channelNames; }
     QStringList trafficLog() const { return m_trafficLog; }
+    ContactListModel *contactsModel() { return &m_contacts; }
+    bool contactsSyncing() const { return m_contactsSyncing; }
+    QString lastSyncInfo() const { return m_lastSyncInfo; }
+
+    // --- contacts ---------------------------------------------------------
+    /// Full re-sync of the node's contact table.
+    Q_INVOKABLE void refreshContacts();
+    /// Send our own advert so other nodes (and repeaters) learn about us.
+    Q_INVOKABLE void sendAdvert(bool flood);
+
+    // --- repeater / room server administration -----------------------------
+    // keyHex = full public key from contactsModel.publicKey.
+    Q_INVOKABLE bool loginToNode(const QString &keyHex, const QString &password);
+    Q_INVOKABLE bool requestNodeStatus(const QString &keyHex);
+    /// Remote CLI command, e.g. "ver", "clock", "neighbors", "set name X".
+    /// Requires a successful admin login first.
+    Q_INVOKABLE bool sendNodeCommand(const QString &keyHex, const QString &command);
+    Q_INVOKABLE bool sendDirectMessage(const QString &keyHex, const QString &text);
 
     Q_INVOKABLE void selectDevice(const QString &address, const QString &name);
     Q_INVOKABLE bool connectToSelected();
     /// Sends a text message on a channel via the companion protocol.
     Q_INVOKABLE bool sendChannelMessage(int channelIdx, const QString &text);
+    /// Poll for incoming messages (debug / manual refresh).
+    Q_INVOKABLE void syncNextMessage();
 
     Q_INVOKABLE void startScan();
     Q_INVOKABLE void stopScan();
@@ -140,8 +166,20 @@ signals:
     void nodeInfoChanged();
     void channelsChanged();
     void trafficLogChanged();
-    void channelMessage(int channelIdx, const QString &text, const QString &time);
+    /// timestamp = sender's send time (epoch secs), sanity-checked.
+    void channelMessage(int channelIdx, const QString &text, const QString &time,
+                        double timestamp);
+    void syncInfoChanged();
     void sendFailed(const QString &reason);
+    void contactsSyncingChanged();
+    void nodeLoginResult(const QString &keyHex, bool success, bool isAdmin);
+    /// status = list of { label, value } maps, ready to show.
+    void nodeStatusReceived(const QString &keyHex, const QVariantList &status);
+    void nodeCliReply(const QString &keyHex, const QString &text);
+    void directMessage(const QString &keyHex, const QString &name,
+                       const QString &text, const QString &time);
+    /// The node accepted a request; the reply should arrive within timeoutMs.
+    void nodeRequestSent(int timeoutMs);
 
 private slots:
     void onDeviceDiscovered(const QBluetoothDeviceInfo &info);
@@ -161,6 +199,7 @@ private slots:
 
 private:
     void setStatus(const QString &status);
+    void ensureLocalDevice();
     void setScanActive(bool active);
     void setConnectionState(const QString &state);
     void refreshAdapterState();
@@ -172,7 +211,7 @@ private:
     void teardownConnection();
 
     QBluetoothDeviceDiscoveryAgent *m_agent = nullptr;
-    QBluetoothLocalDevice m_localDevice;
+    QBluetoothLocalDevice *m_localDevice = nullptr;
     DeviceListModel m_devices;
     QTimer m_nameResolveTimer;
 
@@ -203,6 +242,20 @@ private:
     QStringList m_channelNames;
     QStringList m_trafficLog;
 
+    ContactListModel m_contacts;
+    bool m_contactsSyncing = false;
+    quint32 m_contactsLastMod = 0;      // 'since' for incremental syncs
+    QTimer m_contactRefreshDebounce;    // coalesces bursts of advert pushes
+    QTimer m_contactAgeTimer;           // keeps "x min ago" texts current
+
+    int m_drainCount = 0;               // messages fetched in the current drain
+    bool m_reportDrain = false;         // drain started by us (connect/resume/poll)
+    QString m_lastSyncInfo;
+    QTimer m_messagePollTimer;          // safety poll of the node's queue
+
+    bool checkSession();
+    QString keyHexForPrefix(const QByteArray &prefix) const;
+    static QVariantList parseNodeStatus(const QByteArray &data);
     void writeToUart(const QByteArray &data);
     void appendTraffic(const QString &line);
 };

@@ -19,6 +19,10 @@ add_executable(ubmeshcore
     src/bluetoothmanager.h
     src/companionprotocol.cpp
     src/companionprotocol.h
+    src/contactmodel.cpp
+    src/contactmodel.h
+    src/messagestore.cpp
+    src/messagestore.h
     qml.qrc)
 
 target_include_directories(ubmeshcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

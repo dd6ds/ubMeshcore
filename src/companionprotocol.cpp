@@ -38,9 +38,12 @@ QString CompanionProtocol::commandName(quint8 code)
     case CmdSendChannelTxtMsg: return QStringLiteral("SEND_CHANNEL_TXT_MSG");
     case CmdGetContacts:       return QStringLiteral("GET_CONTACTS");
     case CmdGetDeviceTime:     return QStringLiteral("GET_DEVICE_TIME");
+    case CmdSetDeviceTime:     return QStringLiteral("SET_DEVICE_TIME");
     case CmdSendSelfAdvert:    return QStringLiteral("SEND_SELF_ADVERT");
     case CmdSyncNextMessage:   return QStringLiteral("SYNC_NEXT_MESSAGE");
     case CmdDeviceQuery:       return QStringLiteral("DEVICE_QUERY");
+    case CmdSendLogin:         return QStringLiteral("SEND_LOGIN");
+    case CmdSendStatusReq:     return QStringLiteral("SEND_STATUS_REQ");
     case CmdGetChannel:        return QStringLiteral("GET_CHANNEL");
     default:
         return QStringLiteral("CMD(0x%1)").arg(code, 2, 16, QLatin1Char('0'));
@@ -50,6 +53,7 @@ QString CompanionProtocol::commandName(quint8 code)
 QString CompanionProtocol::responseName(quint8 code)
 {
     switch (code) {
+    case RespContactMsgRecv3: return QStringLiteral("CONTACT_MSG_RECV_V3");
     case RespChannelMsgRecv2: return QStringLiteral("CHANNEL_MSG_RECV");
     case RespChannelInfo:     return QStringLiteral("CHANNEL_INFO");
     case RespOk:             return QStringLiteral("OK");
@@ -127,10 +131,69 @@ void CompanionProtocol::requestChannel(int channelIdx)
     emitFrame(frame);
 }
 
-void CompanionProtocol::requestContacts()
+void CompanionProtocol::requestContacts(quint32 since)
 {
     QByteArray frame;
     frame.append(char(CmdGetContacts));
+    if (since > 0)
+        appendLE32(frame, since);
+    emitFrame(frame);
+}
+
+void CompanionProtocol::setDeviceTime()
+{
+    QByteArray frame;
+    frame.append(char(CmdSetDeviceTime));
+    appendLE32(frame, quint32(QDateTime::currentSecsSinceEpoch()));
+    emitFrame(frame);
+}
+
+void CompanionProtocol::sendSelfAdvert(bool flood)
+{
+    QByteArray frame;
+    frame.append(char(CmdSendSelfAdvert));
+    frame.append(char(flood ? 1 : 0));
+    emitFrame(frame);
+}
+
+void CompanionProtocol::sendLogin(const QByteArray &publicKey, const QString &password)
+{
+    // 1a <pub_key:32> <password, max 15 bytes>
+    if (publicKey.size() != 32)
+        return;
+    QByteArray frame;
+    frame.append(char(CmdSendLogin));
+    frame.append(publicKey);
+    frame.append(password.toUtf8().left(15));
+    // Not emitFrame(): that would put the password into the traffic log.
+    emit traffic(QStringLiteral("TX SEND_LOGIN: %1 <password hidden>")
+                     .arg(QString::fromLatin1(publicKey.left(6).toHex())));
+    emit writeRequested(frame);
+}
+
+void CompanionProtocol::sendStatusRequest(const QByteArray &publicKey)
+{
+    if (publicKey.size() != 32)
+        return;
+    QByteArray frame;
+    frame.append(char(CmdSendStatusReq));
+    frame.append(publicKey);
+    emitFrame(frame);
+}
+
+void CompanionProtocol::sendDirectText(const QByteArray &publicKey, const QString &text,
+                                       quint8 txtType)
+{
+    // 02 <txt_type> <attempt> <timestamp LE32> <pubkey_prefix:6> <text>
+    if (publicKey.size() < 6 || text.isEmpty())
+        return;
+    QByteArray frame;
+    frame.append(char(CmdSendTxtMsg));
+    frame.append(char(txtType));
+    frame.append(char(0));                           // attempt
+    appendLE32(frame, quint32(QDateTime::currentSecsSinceEpoch()));
+    frame.append(publicKey.left(6));
+    frame.append(text.toUtf8().left(140));
     emitFrame(frame);
 }
 
@@ -159,6 +222,59 @@ void CompanionProtocol::sendChannelText(int channelIdx, const QString &text)
 // ---------------------------------------------------------------------------
 // Incoming frames
 // ---------------------------------------------------------------------------
+
+bool CompanionProtocol::parseContact(const QByteArray &payload, MeshContact *out)
+{
+    // <pub_key:32> <type:1> <flags:1> <out_path_len:i8> <out_path:64>
+    // <adv_name:32, NUL-terminated> <last_advert:u32> <adv_lat:i32>
+    // <adv_lon:i32> <lastmod:u32>                      = 147 bytes
+    // Name + last_advert (offset 131..135) are the minimum we can use; the
+    // trailing location/lastmod fields are optional in case the BLE MTU cut
+    // the frame short.
+    constexpr int kName = 32 + 3 + 64;
+    constexpr int kLastAdvert = kName + 32;
+    if (payload.size() < kLastAdvert + 4)
+        return false;
+
+    MeshContact c;
+    c.publicKey = payload.left(32);
+    c.type = quint8(payload.at(32));
+    c.flags = quint8(payload.at(33));
+    c.outPathLen = qint8(payload.at(34));
+
+    const QByteArray nameField = payload.mid(kName, 32);
+    const int nul = nameField.indexOf('\0');
+    c.name = QString::fromUtf8(nul >= 0 ? nameField.left(nul) : nameField).trimmed();
+
+    c.lastAdvert = readLE32(payload, kLastAdvert);
+    if (payload.size() >= kLastAdvert + 12) {
+        c.lat = qint32(readLE32(payload, kLastAdvert + 4)) / 1e6;
+        c.lon = qint32(readLE32(payload, kLastAdvert + 8)) / 1e6;
+    }
+    if (payload.size() >= kLastAdvert + 16)
+        c.lastMod = readLE32(payload, kLastAdvert + 12);
+
+    *out = c;
+    return true;
+}
+
+void CompanionProtocol::handleDirectMessage(const QByteArray &payload, int prefixOffset)
+{
+    // ... <pubkey_prefix:6> <path_len:1> <txt_type:1> <timestamp:u32> <text>
+    const int textOffset = prefixOffset + 6 + 1 + 1 + 4;
+    if (payload.size() < textOffset)
+        return;
+    const QByteArray prefix = payload.mid(prefixOffset, 6);
+    const quint8 txtType = quint8(payload.at(prefixOffset + 7));
+    const quint32 ts = readLE32(payload, prefixOffset + 8);
+    QByteArray body = payload.mid(textOffset);
+    // Signed posts (room servers) carry a 4-byte author prefix before the text.
+    if (txtType == TxtSignedPlain && body.size() >= 4)
+        body = body.mid(4);
+    const QString text = QString::fromUtf8(body).trimmed();
+    qDebug() << "Companion: DM from" << prefix.toHex() << "type" << txtType << text;
+    emit contactMessageReceived(prefix, txtType, text, ts);
+}
 
 void CompanionProtocol::handleFrame(const QByteArray &frame)
 {
@@ -217,17 +333,24 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
 
     case RespChannelMsgRecv:
     case RespChannelMsgRecv2: {
-        // <snr:1> <rsvd:2> <channel_idx:1> <path_len:1> <txt_type:1>
-        // <sender_timestamp LE32> <text...>
-        const int idx = payload.size() > 3 ? int(quint8(payload.at(3))) : 0;
-        const quint32 ts = readLE32(payload, 6);
+        // Two layouts, chosen by the node per frame:
+        //  code 0x08 (v1/v2): <channel_idx:1> <path_len:1> <txt_type:1>
+        //                     <sender_timestamp LE32> <text...>
+        //  code 0x11 (v3):    <snr:1> <rsvd:2> <channel_idx:1> <path_len:1>
+        //                     <txt_type:1> <sender_timestamp LE32> <text...>
+        // Parsing a 0x08 frame with the v3 offsets read a timestamp byte as
+        // the channel (random "Ch191") and cut 3 chars off the sender name.
+        const int base = (code == RespChannelMsgRecv2) ? 3 : 0;
+        const int textOffset = base + 7;
+        if (payload.size() <= textOffset)
+            break;
+        const int idx = int(quint8(payload.at(base)));
+        const quint32 ts = readLE32(payload, base + 3);
         // The text starts at a fixed offset. Hunting for the trailing
         // printable run instead drags timestamp bytes in: 6a cf b9 cb all
         // pass a naive "is printable" test and show up as garbage in front
         // of the message.
-        const QString text = payload.size() > 10
-                                 ? QString::fromUtf8(payload.mid(10)).trimmed()
-                                 : trailingText(payload, 1);
+        const QString text = QString::fromUtf8(payload.mid(textOffset)).trimmed();
         qDebug() << "Companion: channel msg, idx" << idx << "text" << text;
         if (!text.isEmpty())
             emit channelMessageReceived(idx, text, ts);
@@ -236,18 +359,71 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         break;
     }
 
-    case RespContactMsgRecv: {
-        const quint32 ts = readLE32(payload, 8);
-        const QString text = trailingText(payload, 1);
-        emit contactMessageReceived(QStringLiteral("contact"), text, ts);
+    case RespContactMsgRecv:
+        // v1/v2: <pubkey_prefix:6> ...
+        handleDirectMessage(payload, 0);
         syncNextMessage();
+        break;
+
+    case RespContactMsgRecv3:
+        // v3: <snr:1> <reserved:2> <pubkey_prefix:6> ...
+        handleDirectMessage(payload, 3);
+        syncNextMessage();
+        break;
+
+    case RespContactsStart:
+        emit contactsSyncStarted(int(readLE32(payload, 0)));
+        break;
+
+    case RespContact:
+    case PushNewAdvert: {
+        MeshContact contact;
+        if (parseContact(payload, &contact)) {
+            qDebug() << "Companion: contact" << contact.name
+                     << ContactListModel::typeName(contact.type)
+                     << "hops" << contact.outPathLen;
+            emit contactReceived(contact);
+        } else {
+            qWarning() << "Companion: short CONTACT frame," << payload.size() << "bytes";
+        }
         break;
     }
 
+    case RespEndOfContacts:
+        emit contactsSyncFinished(readLE32(payload, 0));
+        break;
+
+    case PushAdvert:
+    case PushPathUpdated:
+        emit contactChanged(payload.left(32));
+        break;
+
+    case PushLoginSuccess:
+        // <permissions:1> <pub_key_prefix:6> <tag:i32> [new_permissions:1]
+        emit loginResult(payload.mid(1, 6), true,
+                         !payload.isEmpty() && (quint8(payload.at(0)) & 0x01));
+        break;
+
+    case PushLoginFail:
+        // <reserved:1> <pub_key_prefix:6>
+        emit loginResult(payload.mid(1, 6), false, false);
+        break;
+
+    case PushStatusResponse:
+        // <reserved:1> <pub_key_prefix:6> <status_data...>
+        emit statusResponse(payload.mid(1, 6), payload.mid(7));
+        break;
+
     case RespNoMoreMessages:
+        emit noMoreMessages();
         break;
 
     case RespSent:
+        // <type:1> <expected_ack_or_tag:4> <suggested_timeout:u32>
+        emit sendAccepted(readLE32(payload, 5));
+        emit sendAcknowledged();
+        break;
+
     case RespOk:
         emit sendAcknowledged();
         break;
@@ -258,6 +434,8 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
 
     case PushMsgWaiting:
         // The node is holding a message for us - go fetch it.
+        qDebug() << "Companion: PushMsgWaiting received - fetching next message";
+        emit traffic(QStringLiteral("PUSH_MSG_WAITING - syncing next message"));
         syncNextMessage();
         break;
 

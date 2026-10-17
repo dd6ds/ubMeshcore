@@ -36,18 +36,66 @@ ApplicationWindow {
     Connections {
         target: BluetoothManager
         onChannelMessage: {
-            messageList.append({
-                sender: "Ch" + channelIdx,
-                text: text,
-                time: time
-            })
+            // Channel texts arrive as "SenderName: message".
+            var sep = text.indexOf(": ")
+            var hasSender = sep > 0 && sep <= 32
+            rootWindow.addMessage(channelIdx,
+                                  hasSender ? text.substring(0, sep) : "Ch" + channelIdx,
+                                  hasSender ? text.substring(sep + 2) : text,
+                                  true, timestamp)
         }
-        onSendFailed: {
-            messageList.append({
-                sender: "!",
-                text: reason,
-                time: Qt.formatTime(new Date(), "hh:mm")
-            })
+        onSendFailed: rootWindow.addLocalMessage("!", reason)
+    }
+
+    // Every message carries the channel it belongs to; the Messages page only
+    // shows the ones of currentChannelIdx. Real messages are also written to
+    // MessageStore so the history survives disconnects and app restarts -
+    // the node hands each message over only once.
+    // "hh:mm" for today, "dd.MM. hh:mm" for older messages - cached messages
+    // fetched from the node in the morning can be from last night.
+    function timeText(ts) {
+        var d = new Date(ts * 1000)
+        var today = new Date()
+        today.setHours(0, 0, 0, 0)
+        return Qt.formatDateTime(d, d.getTime() < today.getTime() ? "dd.MM. hh:mm" : "hh:mm")
+    }
+
+    // ts = sender's send time in epoch secs (defaults to now).
+    function addMessage(channel, sender, text, persist, ts) {
+        if (!ts)
+            ts = Math.floor(Date.now() / 1000)
+        messageList.append({ channel: channel, sender: sender, text: text,
+                             time: timeText(ts) })
+        if (persist)
+            MessageStore.append({ channel: channel, sender: sender, text: text, ts: ts })
+    }
+
+    function addLocalMessage(sender, text) {
+        // "!" entries are transient status/errors and are not stored.
+        addMessage(rootWindow.currentChannelIdx, sender, text, sender !== "!", 0)
+    }
+
+    // The channel pages set the index first and the name second, so save on
+    // either change to never store a stale name.
+    function saveLastChannel() {
+        if (currentChannelIdx >= 0)
+            MessageStore.setLastChannel(currentChannelIdx, currentChannelName)
+    }
+    onCurrentChannelIdxChanged: saveLastChannel()
+    onCurrentChannelNameChanged: saveLastChannel()
+
+    Component.onCompleted: {
+        // Restore the history first, then the last opened channel.
+        var stored = MessageStore.loadAll()
+        for (var i = 0; i < stored.length; ++i) {
+            var m = stored[i]
+            messageList.append({ channel: m.channel, sender: m.sender, text: m.text,
+                                 time: m.ts ? timeText(m.ts) : (m.time || "") })
+        }
+        var last = MessageStore.lastChannel()
+        if (last.idx >= 0) {
+            currentChannelName = last.name
+            currentChannelIdx = last.idx
         }
     }
 
@@ -265,6 +313,13 @@ ApplicationWindow {
                 }
 
                 Button {
+                    text: "Contacts"
+                    enabled: BluetoothManager.uartReady
+                    Layout.alignment: Qt.AlignHCenter
+                    onClicked: mainStack.currentIndex = 4
+                }
+
+                Button {
                     text: "Back"
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 0
@@ -434,14 +489,46 @@ ApplicationWindow {
                 anchors.margins: rootWindow.spacingUnit
                 spacing: rootWindow.spacingUnit
 
-                AppLabel {
-                    text: rootWindow.currentChannelName
-                          + "  ·  " + (BluetoothManager.sessionReady
-                                       ? "session ready" : "no node session")
-                    color: BluetoothManager.sessionReady ? "#2e7d32" : "#b00"
-                    font.pixelSize: rootWindow.fontSecondary
+                // Header with the back button at the TOP: the old button at
+                // the bottom was hidden behind the on-screen keyboard.
+                RowLayout {
                     Layout.fillWidth: true
-                    wrapMode: Text.Wrap
+                    spacing: rootWindow.spacingUnit
+
+                    Button {
+                        text: "‹ Channels"
+                        Layout.preferredHeight: Math.round(rootWindow.gu * 5)
+                        onClicked: {
+                            messageInput.focus = false
+                            Qt.inputMethod.hide()
+                            mainStack.currentIndex = 2
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        AppLabel {
+                            Layout.fillWidth: true
+                            text: rootWindow.currentChannelName || "No channel"
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        AppLabel {
+                            Layout.fillWidth: true
+                            text: BluetoothManager.sessionReady ? "session ready" : "no node session"
+                            color: BluetoothManager.sessionReady ? "#2e7d32" : "#b00"
+                            font.pixelSize: rootWindow.fontSecondary
+                        }
+                        AppLabel {
+                            Layout.fillWidth: true
+                            visible: BluetoothManager.lastSyncInfo.length > 0
+                            text: "↓ " + BluetoothManager.lastSyncInfo
+                            color: "#0078d7"
+                            font.pixelSize: rootWindow.fontSecondary
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
 
                 RowLayout {
@@ -468,49 +555,72 @@ ApplicationWindow {
                                         "session", BluetoothManager.sessionReady,
                                         "len", txt.length)
                             if (txt.length === 0) {
-                                messageList.append({ sender: "!",
-                                    text: "Nothing typed yet",
-                                    time: Qt.formatTime(new Date(), "hh:mm") })
+                                rootWindow.addLocalMessage("!", "Nothing typed yet")
                                 return
                             }
                             if (!BluetoothManager.sessionReady) {
-                                messageList.append({ sender: "!",
-                                    text: "No node session - connect first",
-                                    time: Qt.formatTime(new Date(), "hh:mm") })
+                                rootWindow.addLocalMessage("!", "No node session - connect first")
                                 return
                             }
                             if (rootWindow.currentChannelIdx < 0) {
-                                messageList.append({ sender: "!",
-                                    text: "No channel selected",
-                                    time: Qt.formatTime(new Date(), "hh:mm") })
+                                rootWindow.addLocalMessage("!", "No channel selected")
                                 return
                             }
                             if (BluetoothManager.sendChannelMessage(
                                     rootWindow.currentChannelIdx, txt)) {
-                                messageList.append({
-                                    sender: "You",
-                                    text: txt,
-                                    time: Qt.formatTime(new Date(), "hh:mm")
-                                })
+                                rootWindow.addLocalMessage("You", txt)
                                 messageInput.text = ""
                             }
+                        }
+                    }
+                    
+                    Button {
+                        text: "Refresh"
+                        Layout.preferredHeight: Math.round(rootWindow.gu * 5)
+                        onClicked: {
+                            console.log("Refreshing messages...")
+                            BluetoothManager.syncNextMessage()
                         }
                     }
                 }
                 
                 ListView {
+                    id: messageView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: messageList
                     clip: true
+                    // Follow new messages of the open channel.
+                    onCountChanged: positionViewAtEnd()
+
+                    AppLabel {
+                        anchors.centerIn: parent
+                        visible: messageView.contentHeight < 1
+                        text: "No messages in this channel yet"
+                        color: "#888"
+                        font.pixelSize: rootWindow.fontSecondary
+                    }
+
                     delegate: Item {
                         id: messageDelegate
-                        height: Math.round(rootWindow.gu * 7)
+                        // Only the selected channel is shown; other rows
+                        // collapse to zero height but stay in the model.
+                        readonly property bool shown: model.channel === rootWindow.currentChannelIdx
+                        visible: shown
+                        height: shown ? msgColumn.implicitHeight + rootWindow.spacingUnit : 0
                         width: ListView.view.width
                         Column {
-                            spacing: 4
+                            id: msgColumn
+                            spacing: 2
                             anchors { left: parent.left; right: parent.right; margins: rootWindow.spacingUnit }
-                            AppLabel { text: model.sender + ": " + model.text }
+                            AppLabel {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                textFormat: Text.PlainText
+                                text: model.sender + ": " + model.text
+                                color: model.sender === "!" ? "#b00"
+                                     : model.sender === "You" ? "#0050a0" : "#111111"
+                            }
                             AppLabel { text: model.time; color: "#666"; font.pixelSize: rootWindow.fontSecondary }
                         }
                         MouseArea {
@@ -519,14 +629,33 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+            
+        }
+        
+        // Page 4: Contacts
+        Page {
+            id: contactsPage
+            title: "Contacts"
+            
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: rootWindow.spacingUnit
+                spacing: rootWindow.spacingUnit
+                
+                ContactList {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
                 
                 Button {
                     text: "Back"
                     Layout.alignment: Qt.AlignHCenter
-                    onClicked: mainStack.currentIndex = 2
+                    Layout.preferredWidth: Math.round(rootWindow.gu * 22)
+                    Layout.preferredHeight: Math.round(rootWindow.gu * 5)
+                    onClicked: mainStack.currentIndex = 1
                 }
             }
-            
         }
         
         // Page 5: Settings
@@ -548,13 +677,13 @@ ApplicationWindow {
                 Button {
                     text: "Node Administration"
                     Layout.alignment: Qt.AlignHCenter
-                    onClicked: mainStack.currentIndex = 5
+                    onClicked: mainStack.currentIndex = 6
                 }
                 
                 Button {
                     text: "About"
                     Layout.alignment: Qt.AlignHCenter
-                    onClicked: mainStack.currentIndex = 6
+                    onClicked: mainStack.currentIndex = 7
                 }
                 
                 Button {
@@ -595,7 +724,7 @@ ApplicationWindow {
                 Button {
                     text: "Back"
                     Layout.alignment: Qt.AlignHCenter
-                    onClicked: mainStack.currentIndex = 4
+                    onClicked: mainStack.currentIndex = 5
                 }
             }
         }
@@ -636,7 +765,7 @@ ApplicationWindow {
                 Button {
                     text: "Back"
                     Layout.alignment: Qt.AlignHCenter
-                    onClicked: mainStack.currentIndex = 4
+                    onClicked: mainStack.currentIndex = 5
                 }
             }
         }
@@ -661,8 +790,12 @@ ApplicationWindow {
             onClicked: mainStack.currentIndex = 3
         }
         ToolButton {
-            text: "Settings"
+            text: "Contacts"
             onClicked: mainStack.currentIndex = 4
+        }
+        ToolButton {
+            text: "Settings"
+            onClicked: mainStack.currentIndex = 5
         }
     }
 }

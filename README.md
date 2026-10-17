@@ -4,8 +4,32 @@ A Bluetooth LE companion app for [MeshCore](https://meshcore.co.uk) nodes,
 built for Ubuntu Touch.
 
 The app connects to a MeshCore companion radio over the Nordic UART Service,
-speaks the MeshCore companion protocol, and lets you read and send messages on
-the node's channels.
+speaks the MeshCore companion protocol, and lets you read and send channel
+messages, browse the nodes your radio has heard, and administer repeaters over
+the mesh.
+
+## Features
+
+- **Channels** — read and send messages per channel. Each channel shows only
+  its own messages; the history is stored on the phone and survives
+  disconnects and app restarts. The last opened channel is reopened on start.
+- **Offline queue** — messages the node cached while the app was away are
+  fetched on connect, when the app returns to the foreground, and by a
+  once-a-minute safety poll. They keep their original send time (with date if
+  older than today), and the Messages page reports how many were fetched.
+- **Contacts** — the node's live contact table, built from received adverts
+  and refreshed automatically when new adverts arrive. Shows type (repeater,
+  companion, room), hops, last heard and an active indicator. Filters: type,
+  search, *only active (24 h)*, *only favourites*.
+- **Favourites** — star any contact; favourites sort to the top. Stored on the
+  phone, so they survive re-syncs and restarts.
+- **Repeater / room server admin** — login with password (admin or guest),
+  status request (battery, uptime, noise floor, RSSI/SNR, packet counters,
+  airtime) and remote CLI commands with quick buttons (`ver`, `clock`,
+  `clock sync`, `neighbors`, `get name`, `get radio`, `get tx`, `advert`).
+- **Advert** — send your own flood advert from the contacts page.
+- **Auto-reconnect** — Lomiri suspends background apps, which drops the BLE
+  link; the app reconnects to the last node when it is in the foreground again.
 
 ## Status
 
@@ -13,17 +37,22 @@ the node's channels.
 |---|---|
 | BLE scan, device list | working |
 | GATT connect, NUS discovery, notifications | working |
-| `APP_START` handshake, node name | working |
-| Channel table read from the node | working |
-| Receiving channel messages | working |
-| Sending channel messages | implemented, command code unverified |
-| Direct (contact) messages | not implemented |
+| `APP_START` handshake, node name, clock sync | working |
+| Channel table, receiving channel messages | working (verified on a live node) |
+| Sending channel messages | working |
+| Per-channel view, persistent history | working |
+| Offline message queue | working (verified on a live node) |
+| Contacts from adverts, favourites | working |
+| Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
+| Direct (contact) messages | received and decoded, no UI yet |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
 
 ## Requirements
 
 - [Clickable](https://clickable-ut.dev) 8.7 or newer, with Docker
 - An Ubuntu Touch device in developer mode, reachable over ADB
+  (tested on 24.04-2.x; the click targets the `ubuntu-sdk-20.04` framework,
+  which 24.04 still ships)
 - A MeshCore node running companion-radio firmware
 
 Everything else (Qt 5.12 cross toolchain, cargo) lives in the Clickable
@@ -34,15 +63,17 @@ container; nothing needs to be installed on the host.
 ```bash
 clickable build      # produces build/aarch64-linux-gnu/app/*.click
 clickable install    # pushes and installs over ADB
+clickable launch
 clickable logs       # follow the app's output
 ```
 
 > **Kill the running app before installing.** `clickable install` replaces the
 > binary but does not stop a running instance, so the old version keeps running
-> and it looks like your changes had no effect:
+> and it looks like your changes had no effect. A suspended app ignores a plain
+> SIGTERM until it is resumed, so use `-9`:
 >
 > ```bash
-> adb shell pkill -f ubmeshcore && clickable install
+> adb shell pkill -9 ubmeshcore; clickable install && clickable launch
 > ```
 
 ## Layout
@@ -54,60 +85,133 @@ manifest.json             Click metadata (arch and framework patched by Clickabl
 ubmeshcore.apparmor       Policy groups, including the reserved "bluetooth" one
 qml.qrc                   QML is compiled into the binary, not installed separately
 
-src/main.cpp              Entry point, QML context properties
-src/bluetoothmanager.*    Discovery, GATT connection, NUS plumbing
+src/main.cpp              Entry point, QML context properties, resume handling
+src/bluetoothmanager.*    Discovery, GATT connection, NUS plumbing, session,
+                          contact sync, repeater admin, offline-queue drain
 src/companionprotocol.*   MeshCore companion frame encode/decode
+src/contactmodel.*        Contact list model (adverts), favourites
+src/messagestore.*        Persistent channel message history, last channel
 src/rust/                 Rust core (ubmeshcore_core), currently unused
 
-qml/main.qml              All pages
+qml/main.qml              Pages: discovery, connect, channels, messages, ...
+qml/ContactList.qml       Contacts page with filters and favourites
+qml/RepeaterAdmin.qml     Repeater / room server login, status, CLI
 qml/AppLabel.qml          Label with an explicit colour
 qml/AppField.qml          TextField with an explicit colour and background
 ```
 
 `qml/NodeManager.qml`, `MessageView.qml` and `SettingsView.qml` are leftovers
 from the original scaffold and are not loaded. `MessageView.qml` does not even
-parse on Qt 5.12 — it uses `component`, a Qt 5.15 feature.
+parse on Qt 5.12 — it uses `component`, a Qt 5.15 feature. The `config/`,
+`database/`, `managers/`, `maps/`, `models/`, `network/`, `qr/` and `utils/`
+directories are likewise not part of the build.
+
+## Data on the phone
+
+All paths are inside the app's AppArmor-writable directories:
+
+| Path | Content |
+|---|---|
+| `~/.local/share/ubmeshcore/channel_messages.jsonl` | Channel history, one JSON object per line, newest 3000 kept |
+| `~/.local/share/ubmeshcore/ubmeshcore.log` | App log (also in the journal) |
+| `~/.config/ubmeshcore/ubMeshcore.conf` | Favourites, last opened channel |
+
+Confined apps cannot write to `/tmp` or directly to `~/.local/share`; an
+earlier version logged there, and its error path then called `fclose(NULL)` and
+segfaulted on startup.
 
 ## Companion protocol notes
 
 Frames carry one leading code byte and no length prefix; each BLE
 write/notification is exactly one frame. Codes at or above `0x80` are
-unsolicited pushes.
+unsolicited pushes. The reference is the
+[Companion Radio Protocol](https://docs.meshcore.io/companion_protocol/);
+all multi-byte values are little endian.
 
-Verified against a live node (`DD6DS-Mobile`):
+Commands sent by the app:
 
-| Code | Direction | Meaning |
+| Code | Name | Payload |
 |---|---|---|
-| `0x01` | TX | `APP_START` — `01 <ver> <6 reserved> <app name>` |
-| `0x1f` | TX | `GET_CHANNEL` — `1f <index>` |
-| `0x0a` | TX | `SYNC_NEXT_MESSAGE` |
-| `0x03` | TX | `SEND_CHANNEL_TXT_MSG` — **unverified** |
-| `0x05` | RX | `SELF_INFO`; node name is the trailing string |
-| `0x11` | RX | Channel message |
-| `0x12` | RX | Channel table entry |
-| `0x80` | RX | Advert push — code plus 32-byte public key |
-| `0x83` | RX | Message waiting (1 byte); answer with `SYNC_NEXT_MESSAGE` |
-| `0x88` | RX | RX log — `88 <snr×4, int8> <rssi, int8> <raw LoRa packet>` |
+| `0x01` | `APP_START` | `<ver> <6 reserved> <app name>` |
+| `0x02` | `SEND_TXT_MSG` | `<txt_type> <attempt> <ts:4> <pubkey prefix:6> <text>`; `txt_type 1` = remote CLI |
+| `0x03` | `SEND_CHANNEL_TXT_MSG` | `<txt_type> <channel_idx> <ts:4> <text>` |
+| `0x04` | `GET_CONTACTS` | optional `<since:4>` (last `lastmod`) for incremental sync |
+| `0x06` | `SET_DEVICE_TIME` | `<epoch:4>` — sent on every session start |
+| `0x07` | `SEND_SELF_ADVERT` | `<1 = flood, 0 = zero-hop>` |
+| `0x0a` | `SYNC_NEXT_MESSAGE` | — |
+| `0x1a` | `SEND_LOGIN` | `<pub_key:32> <password, max 15>` (never written to the trace) |
+| `0x1b` | `SEND_STATUS_REQ` | `<pub_key:32>` |
+| `0x1f` | `GET_CHANNEL` | `<index>` |
 
-Two field layouts worth knowing, because both cost a debugging round:
+Frames received (verified against a live node, `DD6DS-Mobile`, unless noted):
+
+| Code | Meaning |
+|---|---|
+| `0x02` / `0x03` / `0x04` | Contacts start (`<count:4>`), one contact, end (`<most_recent_lastmod:4>`) |
+| `0x05` | `SELF_INFO`; node name is the trailing string |
+| `0x06` | `SENT` — `<type> <ack/tag:4> <suggested_timeout:4>` |
+| `0x07` / `0x10` | Contact message v1 / v3 (v3 adds `<snr> <reserved:2>` in front) |
+| `0x08` / `0x11` | Channel message v1 / v3 — see below |
+| `0x0a` | `NO_MORE_MESSAGES` — the node's offline queue is empty |
+| `0x12` | Channel table entry |
+| `0x80` / `0x81` | Advert / path updated — `<pub_key:32>`; triggers an incremental contact sync |
+| `0x83` | Message waiting (1 byte); answer with `SYNC_NEXT_MESSAGE` |
+| `0x85` / `0x86` | Login success (`<permissions> <prefix:6> ...`, bit 0 = admin) / fail |
+| `0x87` | Status response — `<reserved> <prefix:6> <status block>` |
+| `0x88` | RX log — `<snr×4, int8> <rssi, int8> <raw LoRa packet>` |
+| `0x8a` | New advert (manual-add mode), same layout as a contact |
+
+Layouts worth knowing, because each cost a debugging round:
+
+**Channel messages come in two layouts, and the node uses the old one.** The
+code decides the layout — parse per code, never with one set of offsets:
+
+```
+0x08 (v1): <channel_idx:1> <path_len:1> <txt_type:1> <timestamp:4> <text>
+0x11 (v3): <snr:1> <reserved:2> <channel_idx:1> <path_len:1> <txt_type:1> <timestamp:4> <text>
+```
+
+Parsing `0x08` with the v3 offsets reads a timestamp byte as the channel
+(random indices like 191) and cuts the first three characters off the text.
+The text is `"<sender name>: <message>"`. Do not search backwards for the
+trailing printable run either: timestamp bytes such as `6a cf b9 cb` pass a
+naive printable test and end up prepended to the message.
 
 **`0x12` channel entry** — `<index:1> <name, NUL-terminated> <secret:32>`.
 The name field is fixed width and is *not* zeroed by the firmware; channel 1
 carried a stray `63` ('c') from a previous name after its NUL. Cut at the first
 NUL, never read to the end of the payload.
 
-**`0x11` channel message** — `<snr:1> <reserved:2> <channel_idx:1> <path_len:1>
-<txt_type:1> <timestamp:4 LE> <text>`. The text starts at offset 10. Do not
-search backwards for the trailing printable run: timestamp bytes such as
-`6a cf b9 cb` pass a naive printable test and end up prepended to the message.
+**`0x03` contact** — `<pub_key:32> <type:1> <flags:1> <out_path_len:int8>
+<out_path:64> <name:32, NUL-terminated> <last_advert:4> <lat:int32 ×1e6>
+<lon:int32 ×1e6> <lastmod:4>` = 147 bytes. Types: 1 companion, 2 repeater,
+3 room, 4 sensor. `out_path_len -1` means no known path (flood). "Last heard"
+uses `lastmod`, which the *companion* node stamps when the advert arrives — a
+repeater with a wrong clock cannot skew it, which is why the app sets the node
+clock on connect.
+
+**Repeater status block** (`0x87`, from the repeater firmware's
+`RepeaterStats`): `batt_mv:u16 tx_queue:u16 noise_floor:i16 last_rssi:i16
+pkts_recv:u32 pkts_sent:u32 air_time:u32 uptime:u32 sent_flood:u32
+sent_direct:u32 recv_flood:u32 recv_direct:u32 errors:u16 last_snr:i16(×4)
+direct_dups:u16 flood_dups:u16 rx_air_time:u32`. Fields are read only as far
+as the block reaches. Not yet confirmed against a live repeater.
 
 The `0x88` RX log is a firehose — the node forwards every LoRa packet it
 overhears. It is decoded to a one-line summary and kept out of the UI.
 
 ## Platform constraints
 
-- **Ubuntu Touch 20.04 ships Qt 5.12.** `import QtQuick 2.15` and friends make
-  the whole file fail to load. 2.12 is the ceiling.
+- **Build against Qt 5.12.** The `ubuntu-sdk-20.04` framework ships Qt 5.12,
+  even though a 24.04 device runs 5.15. `import QtQuick 2.15` and friends make
+  the whole file fail to load; 2.12 is the ceiling. `Connections` handlers use
+  the old `onSignal: { ... }` form for the same reason.
+- **Do not set `QT_QPA_PLATFORM`, `MIR_SOCKET` or Qt plugin paths in code.**
+  `lomiri-app-launch` sets them for the running shell; hard-coding them breaks
+  the app on other OS versions.
+- **Lomiri suspends background apps.** The BLE link drops, and pushes that
+  arrive meanwhile (e.g. `0x83` message waiting) are lost. The app reconnects
+  or drains the node's queue on resume and polls the queue once a minute.
 - **The QML QtBluetooth module tops out at 5.2** and has no BLE scanning, and
   there is no `DeviceDiscoveryAgent` QML type. All Bluetooth work happens in
   C++.
@@ -117,11 +221,15 @@ overhears. It is decoded to a one-line summary and kept out of the UI.
   D-Bus to fill them in; without this the list shows MAC addresses twice.
 - **`bluetooth` is a reserved AppArmor policy group.** Sideloading works;
   publishing to the OpenStore would need manual review. `clickable.yaml` sets
-  `ignore_review_errors` so the build does not stop on it.
+  `ignore_review_errors` so the build does not stop on it. Removing the group
+  does not fix startup problems — it only breaks Bluetooth.
 - **`QT_QUICK_CONTROLS_STYLE=Default` is set in `main.cpp`.** Otherwise the
   platform palette renders controls without explicit colours dark-on-dark, and
   text becomes invisible rather than merely ugly. Use `AppLabel` and `AppField`
-  rather than bare `Label` and `TextField`.
+  rather than bare `Label` and `TextField` (and an `AppLabel` next to a bare
+  `CheckBox` instead of its `text`).
+- **The adapter is created at startup**, not lazily on the first scan: the
+  *Start Scan* button is only enabled once the adapter is known to be ready.
 
 ## Enabling the Rust core
 
@@ -147,7 +255,12 @@ code names — usually faster than digging through logs. For the full picture:
 ```bash
 clickable logs
 adb shell 'journalctl --user -n 2000 --no-pager | grep -a Companion'
+adb shell 'journalctl --user -f | grep aa-exec'        # live app output
+adb shell 'dmesg | grep ubmeshcore | grep DENIED'      # AppArmor denials
 ```
+
+QML load errors are written to the journal and to the app log; an app that
+"does not start" is almost always a QML error, not AppArmor.
 
 ## License
 
