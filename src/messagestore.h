@@ -31,6 +31,10 @@ public:
     Q_INVOKABLE QVariantMap lastChannel() const;
     Q_INVOKABLE void setLastChannel(int idx, const QString &name);
 
+    /// Unread counts per channel ({"<idx>": count}), kept across restarts.
+    Q_INVOKABLE QVariantMap unreadCounts() const;
+    Q_INVOKABLE void setUnreadCounts(const QVariantMap &counts);
+
 private:
     void rewrite(const QVariantList &messages);
     QString m_path;

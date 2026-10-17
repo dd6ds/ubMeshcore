@@ -43,6 +43,9 @@ ApplicationWindow {
                                   hasSender ? text.substring(0, sep) : "Ch" + channelIdx,
                                   hasSender ? text.substring(sep + 2) : text,
                                   true, timestamp, route)
+            // Count it as new unless that channel is open on screen right now.
+            if (!rootWindow.isReading(channelIdx))
+                rootWindow.bumpUnread(channelIdx)
         }
         onSendFailed: rootWindow.addLocalMessage("!", reason)
     }
@@ -76,6 +79,59 @@ ApplicationWindow {
                                   route: r, routeDetail: rd })
     }
 
+    // --- unread counters ------------------------------------------------
+    // unread = { "<channel idx>": count }. Reassigned (never mutated in place)
+    // so every binding that reads it re-evaluates.
+    property var unread: ({})
+    readonly property int unreadTotal: {
+        var n = 0
+        for (var k in unread)
+            n += unread[k]
+        return n
+    }
+    readonly property int messagesPageIndex: 3
+
+    function unreadFor(idx) {
+        return unread[String(idx)] || 0
+    }
+
+    // Unread in all channels except the one open on the Messages page.
+    function unreadElsewhere() {
+        return unreadTotal - unreadFor(currentChannelIdx)
+    }
+
+    function isReading(idx) {
+        return mainStack.currentIndex === messagesPageIndex
+                && idx === currentChannelIdx
+                && Qt.application.state === Qt.ApplicationActive
+    }
+
+    function bumpUnread(idx) {
+        var u = Object.assign({}, unread)
+        u[String(idx)] = (u[String(idx)] || 0) + 1
+        unread = u
+        MessageStore.setUnreadCounts(u)
+    }
+
+    function markRead(idx) {
+        if (!unreadFor(idx))
+            return
+        var u = Object.assign({}, unread)
+        delete u[String(idx)]
+        unread = u
+        MessageStore.setUnreadCounts(u)
+    }
+
+    // Opening a channel (or coming back to the app on it) marks it read.
+    function markCurrentReadIfVisible() {
+        if (isReading(currentChannelIdx))
+            markRead(currentChannelIdx)
+    }
+    Connections {
+        target: Qt.application
+        onStateChanged: rootWindow.markCurrentReadIfVisible()
+    }
+
     function addLocalMessage(sender, text) {
         // "!" entries are transient status/errors and are not stored.
         addMessage(rootWindow.currentChannelIdx, sender, text, sender !== "!", 0, null)
@@ -87,7 +143,10 @@ ApplicationWindow {
         if (currentChannelIdx >= 0)
             MessageStore.setLastChannel(currentChannelIdx, currentChannelName)
     }
-    onCurrentChannelIdxChanged: saveLastChannel()
+    onCurrentChannelIdxChanged: {
+        saveLastChannel()
+        markCurrentReadIfVisible()
+    }
     onCurrentChannelNameChanged: saveLastChannel()
 
     Component.onCompleted: {
@@ -99,6 +158,7 @@ ApplicationWindow {
                                  time: m.ts ? timeText(m.ts) : (m.time || ""),
                                  route: m.route || "", routeDetail: m.routeDetail || "" })
         }
+        unread = MessageStore.unreadCounts()
         var last = MessageStore.lastChannel()
         if (last.idx >= 0) {
             currentChannelName = last.name
@@ -114,6 +174,7 @@ ApplicationWindow {
         currentIndex: 0
         
         id: mainStack
+        onCurrentIndexChanged: rootWindow.markCurrentReadIfVisible()
         
         // Page 1: Node Discovery
         Page {
@@ -317,6 +378,13 @@ ApplicationWindow {
                     enabled: BluetoothManager.uartReady
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 2
+                    UnreadBadge {
+                        count: rootWindow.unreadTotal
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.rightMargin: -width / 3
+                        anchors.topMargin: -height / 3
+                    }
                 }
 
                 Button {
@@ -447,9 +515,9 @@ ApplicationWindow {
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left
-                                anchors.right: parent.right
+                                anchors.right: channelBadge.left
                                 anchors.margins: rootWindow.spacingUnit
-                                spacing: Math.round(rootWindow.gu * 0.5)
+                                spacing: Math.round(rootWindow.gu * 0.2)
                                 AppLabel {
                                     text: String(modelData)
                                     font.bold: true
@@ -457,6 +525,21 @@ ApplicationWindow {
                                     elide: Text.ElideRight
                                     width: parent.width
                                 }
+                                AppLabel {
+                                    visible: rootWindow.unreadFor(index) > 0
+                                    text: rootWindow.unreadFor(index) === 1
+                                          ? "1 new message"
+                                          : rootWindow.unreadFor(index) + " new messages"
+                                    color: "#d32f2f"
+                                    font.pixelSize: rootWindow.fontSecondary
+                                }
+                            }
+                            UnreadBadge {
+                                id: channelBadge
+                                count: rootWindow.unreadFor(index)
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.right: parent.right
+                                anchors.rightMargin: rootWindow.spacingUnit
                             }
                             MouseArea {
                                 id: channelMouse
@@ -509,6 +592,14 @@ ApplicationWindow {
                             messageInput.focus = false
                             Qt.inputMethod.hide()
                             mainStack.currentIndex = 2
+                        }
+                        // New messages waiting in OTHER channels.
+                        UnreadBadge {
+                            count: rootWindow.unreadElsewhere()
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: -width / 3
+                            anchors.topMargin: -height / 3
                         }
                     }
 
@@ -820,6 +911,11 @@ ApplicationWindow {
         ToolButton {
             text: "Channels"
             onClicked: mainStack.currentIndex = 2
+            UnreadBadge {
+                count: rootWindow.unreadTotal
+                anchors.right: parent.right
+                anchors.top: parent.top
+            }
         }
         ToolButton {
             text: "Messages"

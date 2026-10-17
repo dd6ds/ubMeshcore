@@ -92,6 +92,16 @@ void MessageStore::setLastChannel(int idx, const QString &name)
     s.setValue(QStringLiteral("channels/lastName"), name);
 }
 
+QVariantMap MessageStore::unreadCounts() const
+{
+    return QSettings().value(QStringLiteral("channels/unread")).toMap();
+}
+
+void MessageStore::setUnreadCounts(const QVariantMap &counts)
+{
+    QSettings().setValue(QStringLiteral("channels/unread"), counts);
+}
+
 void MessageStore::rewrite(const QVariantList &messages)
 {
     // QSaveFile: write to a temp file and rename, so a crash cannot leave a

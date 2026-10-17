@@ -19,6 +19,11 @@ the mesh.
 - **Channels** — read and send messages per channel. Each channel shows only
   its own messages; the history is stored on the phone and survives
   disconnects and app restarts. The last opened channel is reopened on start.
+- **Unread indicators** — new messages in a channel you are not reading
+  show a red count badge on that channel's row ("3 new messages"), a total
+  on the *Channels* buttons, and on *‹ Channels* inside a channel for unread
+  messages elsewhere. Opening a channel marks it read; counts survive
+  restarts.
 - **Offline queue** — messages the node cached while the app was away are
   fetched on connect, when the app returns to the foreground, and by a
   once-a-minute safety poll. They keep their original send time (with date if
@@ -53,7 +58,8 @@ the mesh.
 | Per-channel view, persistent history | working |
 | Offline message queue | working (verified on a live node) |
 | Contacts from adverts, favourites | working |
-| Message path (hops, route, repeater names) | implemented; matching to the raw packet not yet confirmed on a live message |
+| Message path (hops, route, repeater names) | working (verified on live messages) |
+| Unread indicators per channel | working |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
 | Direct (contact) messages | received and decoded, no UI yet |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
@@ -70,6 +76,14 @@ Everything else (Qt 5.12 cross toolchain, cargo) lives in the Clickable
 container; nothing needs to be installed on the host.
 
 ## Build and install
+
+The quickest way — build, install and launch on the phone in one go:
+
+```bash
+clickable --arch arm64
+```
+
+Or step by step:
 
 ```bash
 clickable build      # produces build/aarch64-linux-gnu/app/*.click

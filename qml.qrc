@@ -5,6 +5,7 @@
     <file>qml/AppField.qml</file>
     <file>qml/ContactList.qml</file>
     <file>qml/RepeaterAdmin.qml</file>
+    <file>qml/UnreadBadge.qml</file>
     <file>qml/NodeManager.qml</file>
     <file>qml/MessageView.qml</file>
     <file>qml/SettingsView.qml</file>
