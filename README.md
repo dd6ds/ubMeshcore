@@ -98,6 +98,48 @@ the mesh.
 Everything else (Qt 5.12 cross toolchain, cargo) lives in the Clickable
 container; nothing needs to be installed on the host.
 
+## Prerequisites (Linux Mint)
+
+For Linux Mint 22.x (Ubuntu 24.04 base); on Mint 21.x the steps are the same.
+Clickable does the actual building inside Docker, so the host only needs
+Docker, ADB, Git and Clickable itself.
+
+1. **Packages**
+
+   ```bash
+   sudo apt update
+   sudo apt install docker.io adb git python3 pipx
+   ```
+
+2. **Docker without sudo** — add yourself to the `docker` group, then log out
+   and back in (or reboot) so the group change takes effect:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+
+   Check with `docker run --rm hello-world`.
+
+3. **Clickable** — install it with `pipx` (on Mint 22 a plain
+   `pip install --user` is refused for the system Python):
+
+   ```bash
+   pipx install clickable-ut
+   pipx ensurepath          # adds ~/.local/bin to PATH; open a new terminal
+   clickable --version
+   ```
+
+   Update later with `pipx upgrade clickable-ut`.
+
+4. **Phone** — on the Ubuntu Touch device enable *Settings → About →
+   Developer mode*, connect it over USB and allow the computer when asked.
+   `adb devices` must list it as `device` (not `unauthorized` or `offline`;
+   if it shows `offline`, unlock the phone and replug the cable).
+
+The first `clickable build` downloads the Clickable Docker image (about 4 GB)
+and installs the build dependencies from `clickable.yaml` into a cached image;
+later builds start in seconds.
+
 ## Tested hardware
 
 | Hardware | Role | Works |
