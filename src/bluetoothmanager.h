@@ -202,8 +202,13 @@ signals:
     /// status = list of { label, value } maps, ready to show.
     void nodeStatusReceived(const QString &keyHex, const QVariantList &status);
     void nodeCliReply(const QString &keyHex, const QString &text);
+    /// Direct message from a contact; timestamp = send time, epoch secs.
     void directMessage(const QString &keyHex, const QString &name,
-                       const QString &text, const QString &time);
+                       const QString &text, double timestamp);
+    /// Our DM was queued by the node; delivery is confirmed by dmDelivered
+    /// with the same ack code (hex) - typically within timeoutMs.
+    void dmSent(const QString &keyHex, const QString &ackHex, bool flood, int timeoutMs);
+    void dmDelivered(const QString &ackHex, int roundTripMs);
     /// The node accepted a request; the reply should arrive within timeoutMs.
     void nodeRequestSent(int timeoutMs);
 
@@ -288,6 +293,7 @@ private:
     QTimer m_advertTimeout;
     void setAdvertInfo(bool ok, const QString &text);
     QList<QByteArray> m_writeQueue;     // paced outgoing frames
+    QStringList m_sentFifo;             // per pending RESP_SENT: DM key or ""
     QTimer m_writeTimer;
     static constexpr int kWriteGapMs = 40;
     void flushWriteQueue();

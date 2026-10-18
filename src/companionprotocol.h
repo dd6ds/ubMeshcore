@@ -161,6 +161,11 @@ signals:
     void statusResponse(const QByteArray &keyPrefix, const QByteArray &statusData);
     /// RESP_SENT: the node accepted a send; timeout is its RTT estimate.
     void sendAccepted(quint32 suggestedTimeoutMs);
+    /// RESP_SENT with its details: ack = expected ACK code (DMs) or tag,
+    /// flood = sent flood instead of via a known path.
+    void sendQueued(const QByteArray &ack, bool flood, quint32 suggestedTimeoutMs);
+    /// PUSH_SEND_CONFIRMED: the recipient acknowledged the message with `ack`.
+    void sendConfirmed(const QByteArray &ack, quint32 roundTripMs);
     void sendAcknowledged();
     /// Plain RESP_OK (not SENT/confirmations) - the node accepted the command.
     void okReceived();

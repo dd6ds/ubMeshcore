@@ -587,8 +587,11 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         break;
 
     case RespSent:
-        // <type:1> <expected_ack_or_tag:4> <suggested_timeout:u32>
+        // <type:1, 1 = flood> <expected_ack_or_tag:4> <suggested_timeout:u32>
         emit sendAccepted(readLE32(payload, 5));
+        if (payload.size() >= 5)
+            emit sendQueued(payload.mid(1, 4), !payload.isEmpty() && payload.at(0) == 1,
+                            readLE32(payload, 5));
         emit sendAcknowledged();
         break;
 
@@ -623,6 +626,9 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         break;
 
     case PushSendConfirmed:
+        // <ack_code:4> <round_trip_ms:u32>
+        if (payload.size() >= 4)
+            emit sendConfirmed(payload.left(4), readLE32(payload, 4));
         emit sendAcknowledged();
         break;
 

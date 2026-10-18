@@ -48,6 +48,37 @@ ApplicationWindow {
                 rootWindow.bumpUnread(channelIdx)
         }
         onSendFailed: rootWindow.addLocalMessage("!", reason)
+
+        // --- direct messages ---------------------------------------------
+        onDirectMessage: {
+            rootWindow.addDm(keyHex, name.length ? name : keyHex.substring(0, 8),
+                             text, true, timestamp, "")
+            if (!rootWindow.isReadingDm(keyHex))
+                rootWindow.bumpUnread("dm:" + keyHex)
+        }
+        // The node queued our DM: remember its ack code (oldest unacked
+        // message to that contact) and when to give up waiting.
+        onDmSent: {
+            for (var i = 0; i < messageList.count; ++i) {
+                var m = messageList.get(i)
+                if (m.dm === keyHex && m.status === "sending") {
+                    messageList.setProperty(i, "ack", ackHex)
+                    messageList.setProperty(i, "status", "sent")
+                    messageList.setProperty(i, "sentAt",
+                                            Date.now() + Math.max(timeoutMs, 10000) + 5000)
+                    return
+                }
+            }
+        }
+        onDmDelivered: {
+            for (var i = messageList.count - 1; i >= 0; --i) {
+                var m = messageList.get(i)
+                if (m.ack === ackHex && m.dm.length) {
+                    messageList.setProperty(i, "status", "delivered")
+                    return
+                }
+            }
+        }
         // History is keyed by slot index: when a slot gets a new channel or
         // is emptied, the old channel's messages must not show up under it.
         onChannelSlotCleared: rootWindow.clearChannelHistory(channelIdx)
@@ -106,7 +137,8 @@ ApplicationWindow {
         var r = route ? route.route || "" : ""
         var rd = route ? route.routeDetail || "" : ""
         messageList.append({ channel: channel, sender: sender, text: text,
-                             time: timeText(ts), route: r, routeDetail: rd })
+                             time: timeText(ts), route: r, routeDetail: rd,
+                             dm: "", status: "", ack: "", sentAt: 0 })
         if (persist)
             MessageStore.append({ channel: channel, sender: sender, text: text, ts: ts,
                                   route: r, routeDetail: rd })
@@ -116,11 +148,68 @@ ApplicationWindow {
     // unread = { "<channel idx>": count }. Reassigned (never mutated in place)
     // so every binding that reads it re-evaluates.
     property var unread: ({})
+    // Channel unread (keys "<idx>") and direct-message unread (keys
+    // "dm:<key>") share the map but are counted separately.
     readonly property int unreadTotal: {
         var n = 0
         for (var k in unread)
-            n += unread[k]
+            if (k.indexOf("dm:") !== 0) n += unread[k]
         return n
+    }
+    readonly property int dmUnreadTotal: {
+        var n = 0
+        for (var k in unread)
+            if (k.indexOf("dm:") === 0) n += unread[k]
+        return n
+    }
+    readonly property int contactsPageIndex: 4
+    property string openDmKey: ""      // chat open on the contacts page
+    property var messageModel: messageList
+
+    function dmUnreadFor(key) {
+        return unread["dm:" + key] || 0
+    }
+    function isReadingDm(key) {
+        return mainStack.currentIndex === contactsPageIndex && openDmKey === key
+                && Qt.application.state === Qt.ApplicationActive
+    }
+    function markDmRead(key) {
+        markRead("dm:" + key)
+    }
+
+    // Direct message row. status: "" (received), "sending", "sent",
+    // "delivered", "unconfirmed". Rows carry channel -1, so channel views
+    // never show them.
+    function addDm(key, sender, text, persist, ts, status) {
+        if (!ts)
+            ts = Math.floor(Date.now() / 1000)
+        // sentAt: negative = "sending since", positive = "give up waiting at".
+        messageList.append({ channel: -1, sender: sender, text: text, time: timeText(ts),
+                             route: "", routeDetail: "", dm: key,
+                             status: status || "", ack: "",
+                             sentAt: status === "sending" ? -Date.now() : 0 })
+        if (persist)
+            MessageStore.append({ channel: -1, dm: key, sender: sender, text: text, ts: ts })
+    }
+
+    // Sent DMs not confirmed in time are marked; MeshCore retries are up to
+    // the user (send again).
+    Timer {
+        interval: 5000
+        repeat: true
+        running: true
+        onTriggered: {
+            var now = Date.now()
+            for (var i = 0; i < messageList.count; ++i) {
+                var m = messageList.get(i)
+                // Node confirmed the send, but no ACK from the recipient in time.
+                if (m.status === "sent" && m.sentAt > 0 && now > m.sentAt)
+                    messageList.setProperty(i, "status", "unconfirmed")
+                // The node never even acknowledged the send.
+                else if (m.status === "sending" && m.sentAt < 0 && now + m.sentAt > 15000)
+                    messageList.setProperty(i, "status", "unconfirmed")
+            }
+        }
     }
     readonly property int messagesPageIndex: 3
 
@@ -159,6 +248,8 @@ ApplicationWindow {
     function markCurrentReadIfVisible() {
         if (isReading(currentChannelIdx))
             markRead(currentChannelIdx)
+        if (openDmKey.length && isReadingDm(openDmKey))
+            markDmRead(openDmKey)
     }
     Connections {
         target: Qt.application
@@ -187,9 +278,10 @@ ApplicationWindow {
         var stored = MessageStore.loadAll()
         for (var i = 0; i < stored.length; ++i) {
             var m = stored[i]
-            messageList.append({ channel: m.channel, sender: m.sender, text: m.text,
+            messageList.append({ channel: m.dm ? -1 : m.channel, sender: m.sender, text: m.text,
                                  time: m.ts ? timeText(m.ts) : (m.time || ""),
-                                 route: m.route || "", routeDetail: m.routeDetail || "" })
+                                 route: m.route || "", routeDetail: m.routeDetail || "",
+                                 dm: m.dm || "", status: m.status || "", ack: "", sentAt: 0 })
         }
         unread = MessageStore.unreadCounts()
         var last = MessageStore.lastChannel()
@@ -425,6 +517,14 @@ ApplicationWindow {
                     enabled: BluetoothManager.uartReady
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 4
+                    // Unread direct messages.
+                    UnreadBadge {
+                        count: rootWindow.dmUnreadTotal
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.rightMargin: -width / 3
+                        anchors.topMargin: -height / 3
+                    }
                 }
 
                 Button {
@@ -859,7 +959,10 @@ ApplicationWindow {
                         id: messageDelegate
                         // Only the selected channel is shown; other rows
                         // collapse to zero height but stay in the model.
+                        // Direct messages (dm set, channel -1) never show
+                        // here, even when no channel is selected (idx -1).
                         readonly property bool shown: model.channel === rootWindow.currentChannelIdx
+                                                      && model.dm === ""
                         visible: shown
                         height: shown ? msgColumn.implicitHeight + rootWindow.spacingUnit : 0
                         width: ListView.view.width
@@ -967,6 +1070,7 @@ ApplicationWindow {
                 ContactList {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    app: rootWindow     // message model + DM helpers for the chat page
                 }
                 
                 Button {
@@ -1118,6 +1222,11 @@ ApplicationWindow {
         ToolButton {
             text: qsTr("Contacts")
             onClicked: mainStack.currentIndex = 4
+            UnreadBadge {
+                count: rootWindow.dmUnreadTotal
+                anchors.right: parent.right
+                anchors.top: parent.top
+            }
         }
         ToolButton {
             text: qsTr("Settings")

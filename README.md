@@ -46,6 +46,13 @@ the mesh.
   and refreshed automatically when new adverts arrive. Shows type (repeater,
   companion, room), hops, last heard and an active indicator. Filters: type,
   search, *only active (24 h)*, *only favourites*.
+- **Direct messages** — tap a companion (or long-press → *Send message*) to
+  open a private chat with it. Sent messages show their delivery state:
+  *sending…*, *sent – waiting for confirmation*, *✓ delivered* (the other
+  node acknowledged it) or *⚠ no confirmation received*. Incoming direct
+  messages land in that chat, are kept in the history and show an unread
+  badge on the contact and on the *Contacts* button. Long-press on any
+  contact also offers *Manage* (repeaters/rooms) and favourite on/off.
 - **Favourites** — star any contact; favourites sort to the top. Stored on the
   phone, so they survive re-syncs and restarts.
 - **Repeater / room server admin** — login with password (admin or guest),
@@ -77,7 +84,7 @@ the mesh.
 | Reply / reply with route (long press) | implemented, not yet tested on the phone |
 | Add / remove hashtag channels | implemented, not yet tested on the node; private (random-key) channels not supported yet |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
-| Direct (contact) messages | received and decoded, no UI yet |
+| Direct messages (chat, delivery confirmation) | implemented, not yet tested on the phone; delivery state is not kept across restarts |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
 
 ## Requirements
@@ -90,6 +97,14 @@ the mesh.
 
 Everything else (Qt 5.12 cross toolchain, cargo) lives in the Clickable
 container; nothing needs to be installed on the host.
+
+## Tested hardware
+
+| Hardware | Role | Works |
+|---|---|---|
+| Heltec V3 | Companion | OK |
+| Heltec V4 | Companion | OK |
+| SenseCAP Solar P1 Pro | Repeater | OK |
 
 ## Build and install
 
@@ -137,6 +152,8 @@ src/rust/                 Rust core (ubmeshcore_core), currently unused
 qml/main.qml              Pages: discovery, connect, channels, messages, ...
 qml/ContactList.qml       Contacts page with filters and favourites
 qml/RepeaterAdmin.qml     Repeater / room server login, status, CLI
+qml/DirectChat.qml        Direct message chat with one contact
+qml/UnreadBadge.qml       Red unread-count badge
 qml/AppLabel.qml          Label with an explicit colour
 qml/AppField.qml          TextField with an explicit colour and background
 ```
@@ -163,7 +180,7 @@ the Clickable container (the host's `lupdate` is usually just a wrapper):
 docker run --rm -u $(id -u):$(id -g) -v "$PWD":/p -w /p \
   clickable/amd64-20.04-arm64:latest /usr/lib/qt5/bin/lupdate -no-obsolete \
   -locations relative src/*.cpp qml/main.qml qml/ContactList.qml \
-  qml/RepeaterAdmin.qml -ts i18n/ubmeshcore_de.ts
+  qml/RepeaterAdmin.qml qml/DirectChat.qml -ts i18n/ubmeshcore_de.ts
 python3 i18n/translate_de.py   # fills German; lists any text still missing
 ```
 
@@ -280,6 +297,15 @@ log entry, so only the hop count is known.
 The channel hash is the first byte of SHA-256 over the 16-byte channel secret
 from `0x12` (verified: `#ping` → `0x28`, `#test` → `0xd9`; for hashtag
 channels the secret is the first 16 bytes of SHA-256 of the name).
+
+**Direct message delivery.** `SEND_TXT_MSG` is answered with `RESP_SENT`
+(`<flood:1> <expected_ack:4> <timeout:4>`), and the recipient's ACK arrives
+later as `PUSH_SEND_CONFIRMED` (`<ack:4> <round_trip_ms:4>`) with the same
+code. `RESP_SENT` does not say which command it answers, so the manager keeps
+a FIFO with one entry per command that produces one (DM, channel text, login,
+status, CLI) and pops it in order; DM entries carry the contact key. A DM
+without a confirmation within the node's suggested timeout + 5 s is shown as
+unconfirmed.
 
 **Channel slots.** The node has `max_channels` slots (1, 8 or 40 depending on
 the board). All of them are read on connect, empty ones included, so the app

@@ -64,6 +64,50 @@ Item {
         initialItem: listPage
     }
 
+    // main.qml root: shared message model and the direct-message helpers.
+    property var app
+
+    function openChat(keyHex, contactName) {
+        stack.push(chatComponent, { app: root.app, keyHex: keyHex, contactName: contactName })
+    }
+    function openAdmin(keyHex, nodeName, nodeType) {
+        stack.push(adminComponent, { keyHex: keyHex, nodeName: nodeName, nodeType: nodeType })
+    }
+
+    Component {
+        id: chatComponent
+        DirectChat {
+            onBackRequested: stack.pop()
+        }
+    }
+
+    // Long-press menu of a contact row.
+    Menu {
+        id: contactMenu
+        property string keyHex: ""
+        property string contactName: ""
+        property string contactType: ""
+        property bool favorite: false
+        MenuItem {
+            text: qsTr("Send message")
+            // Direct messages go to companions; repeaters take CLI commands.
+            visible: contactMenu.contactType === "chat"
+            height: visible ? implicitHeight : 0
+            onTriggered: root.openChat(contactMenu.keyHex, contactMenu.contactName)
+        }
+        MenuItem {
+            text: qsTr("Manage")
+            visible: contactMenu.contactType === "repeater" || contactMenu.contactType === "room"
+            height: visible ? implicitHeight : 0
+            onTriggered: root.openAdmin(contactMenu.keyHex, contactMenu.contactName,
+                                        contactMenu.contactType)
+        }
+        MenuItem {
+            text: contactMenu.favorite ? qsTr("Remove from favourites") : qsTr("Add to favourites")
+            onTriggered: BluetoothManager.contactsModel.toggleFavorite(contactMenu.keyHex)
+        }
+    }
+
     Component {
         id: adminComponent
         RepeaterAdmin {
@@ -261,9 +305,14 @@ Item {
                                 }
                             }
 
+                            // Unread direct messages from this contact.
+                            UnreadBadge {
+                                count: root.app ? root.app.dmUnreadFor(publicKey) : 0
+                            }
+
                             AppLabel {
-                                visible: manageable
-                                text: qsTr("Manage ›")
+                                visible: manageable || type === "chat"
+                                text: manageable ? qsTr("Manage ›") : qsTr("Chat ›")
                                 color: root.typeColor(type)
                                 font.pixelSize: root.fontSecondary
                             }
@@ -288,12 +337,22 @@ Item {
                         MouseArea {
                             id: tap
                             anchors.fill: parent
-                            enabled: manageable
-                            onClicked: stack.push(adminComponent, {
-                                                      keyHex: publicKey,
-                                                      nodeName: name,
-                                                      nodeType: type
-                                                  })
+                            // Tap: chat with companions, admin for repeaters/rooms.
+                            onClicked: {
+                                if (type === "chat")
+                                    root.openChat(publicKey, name)
+                                else if (manageable)
+                                    root.openAdmin(publicKey, name, type)
+                            }
+                            // Long press: menu with all options.
+                            onPressAndHold: {
+                                contactMenu.keyHex = publicKey
+                                contactMenu.contactName = name
+                                contactMenu.contactType = type
+                                contactMenu.favorite = isFavorite
+                                var p = mapToItem(root, mouse.x, mouse.y)
+                                contactMenu.popup(root, p.x, p.y)
+                            }
                         }
                     }
                 }

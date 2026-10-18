@@ -271,10 +271,30 @@ BluetoothManager::BluetoothManager(QObject *parent)
                     return;
                 }
                 ++m_drainCount;
-                const QString time = ts > 0
-                    ? QDateTime::fromSecsSinceEpoch(ts).toString(QStringLiteral("HH:mm"))
-                    : QDateTime::currentDateTime().toString(QStringLiteral("HH:mm"));
-                emit directMessage(key, m_contacts.nameForKey(key), text, time);
+                // Same sanity check as channel messages: keep the sender's
+                // time unless its clock is obviously off.
+                const qint64 now = QDateTime::currentSecsSinceEpoch();
+                const qint64 sent = (ts > 0 && qint64(ts) <= now + 3600
+                                     && qint64(ts) >= now - 30 * 86400) ? qint64(ts) : now;
+                emit directMessage(key, m_contacts.nameForKey(key), text, double(sent));
+            });
+
+    // --- direct message delivery -------------------------------------------
+    // RESP_SENT does not say which command it answers, but the node answers
+    // in order: m_sentFifo holds one entry per sent command that produces a
+    // RESP_SENT (DM, channel text, login, status, CLI) - the contact key for
+    // DMs, "" for the others.
+    connect(&m_companion, &CompanionProtocol::sendQueued,
+            this, [this](const QByteArray &ack, bool flood, quint32 timeoutMs) {
+                if (m_sentFifo.isEmpty())
+                    return;
+                const QString key = m_sentFifo.takeFirst();
+                if (!key.isEmpty())
+                    emit dmSent(key, QString::fromLatin1(ack.toHex()), flood, int(timeoutMs));
+            });
+    connect(&m_companion, &CompanionProtocol::sendConfirmed,
+            this, [this](const QByteArray &ack, quint32 rttMs) {
+                emit dmDelivered(QString::fromLatin1(ack.toHex()), int(rttMs));
             });
 
     connect(&m_companion, &CompanionProtocol::channelInfoReceived,
@@ -767,6 +787,7 @@ void BluetoothManager::onControllerDisconnected()
     m_contactRefreshDebounce.stop();
     m_writeQueue.clear();
     m_writeTimer.stop();
+    m_sentFifo.clear();
     if (m_advertPending) {
         m_advertPending = false;
         m_advertTimeout.stop();
@@ -929,6 +950,7 @@ bool BluetoothManager::sendChannelMessage(int channelIdx, const QString &text)
     }
 
     qDebug() << "BluetoothManager: sending on channel" << channelIdx << ":" << text;
+    m_sentFifo.append(QString());
     m_companion.sendChannelText(channelIdx, text);
     return true;
 }
@@ -1089,6 +1111,7 @@ bool BluetoothManager::loginToNode(const QString &keyHex, const QString &passwor
         emit sendFailed(tr("Unknown node"));
         return false;
     }
+    m_sentFifo.append(QString());
     m_companion.sendLogin(c->publicKey, password);
     return true;
 }
@@ -1102,6 +1125,7 @@ bool BluetoothManager::requestNodeStatus(const QString &keyHex)
         emit sendFailed(tr("Unknown node"));
         return false;
     }
+    m_sentFifo.append(QString());
     m_companion.sendStatusRequest(c->publicKey);
     return true;
 }
@@ -1116,6 +1140,7 @@ bool BluetoothManager::sendNodeCommand(const QString &keyHex, const QString &com
         emit sendFailed(tr("Unknown node"));
         return false;
     }
+    m_sentFifo.append(QString());
     m_companion.sendDirectText(c->publicKey, cmd, CompanionProtocol::TxtCliData);
     return true;
 }
@@ -1129,6 +1154,7 @@ bool BluetoothManager::sendDirectMessage(const QString &keyHex, const QString &t
         emit sendFailed(tr("Unknown contact"));
         return false;
     }
+    m_sentFifo.append(QString::fromLatin1(c->publicKey.toHex()));
     m_companion.sendDirectText(c->publicKey, text.trimmed(), CompanionProtocol::TxtPlain);
     return true;
 }

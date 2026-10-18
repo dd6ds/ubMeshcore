@@ -13,7 +13,7 @@
         <translation>Sitzung gestartet - </translation>
     </message>
     <message>
-        <location line="+122" />
+        <location line="+142" />
         <source>%1 message(s) fetched from node at %2</source>
         <translation>%1 Nachricht(en) um %2 vom Node abgerufen</translation>
     </message>
@@ -138,19 +138,19 @@
         <translation>Verbunden - Dienste werden gesucht...</translation>
     </message>
     <message>
-        <location line="+26" />
+        <location line="+27" />
         <source>Connection lost before the node confirmed the advert</source>
         <translation>Verbindung getrennt, bevor der Node das Advert bestätigt hat</translation>
     </message>
     <message>
         <location line="+7" />
         <location line="+94" />
-        <location line="+127" />
+        <location line="+128" />
         <source>Not connected</source>
         <translation>Nicht verbunden</translation>
     </message>
     <message>
-        <location line="-195" />
+        <location line="-196" />
         <source>Connected, but no Nordic UART service</source>
         <translation>Verbunden, aber kein Nordic-UART-Dienst</translation>
     </message>
@@ -176,13 +176,13 @@
     </message>
     <message>
         <location line="+67" />
-        <location line="+112" />
+        <location line="+113" />
         <source>Not connected to a node</source>
         <translation>Mit keinem Node verbunden</translation>
     </message>
     <message>
-        <location line="-108" />
-        <location line="+112" />
+        <location line="-109" />
+        <location line="+113" />
         <source>Node session not started yet</source>
         <translation>Node-Sitzung noch nicht gestartet</translation>
     </message>
@@ -208,18 +208,18 @@
     </message>
     <message>
         <location line="+17" />
-        <location line="+13" />
         <location line="+14" />
+        <location line="+15" />
         <source>Unknown node</source>
         <translation>Unbekannter Node</translation>
     </message>
     <message>
-        <location line="+13" />
+        <location line="+14" />
         <source>Unknown contact</source>
         <translation>Unbekannter Kontakt</translation>
     </message>
     <message>
-        <location line="+23" />
+        <location line="+24" />
         <source>%1 d %2 h</source>
         <translation>%1 T %2 Std.</translation>
     </message>
@@ -322,7 +322,7 @@
 <context>
     <name>CompanionProtocol</name>
     <message>
-        <location filename="../src/companionprotocol.cpp" line="+604" />
+        <location filename="../src/companionprotocol.cpp" line="+607" />
         <source>unsupported command</source>
         <translation>nicht unterstützter Befehl</translation>
     </message>
@@ -410,7 +410,27 @@
         <translation>%1 Hops</translation>
     </message>
     <message>
-        <location line="+32" />
+        <location line="+34" />
+        <source>Send message</source>
+        <translation>Nachricht senden</translation>
+    </message>
+    <message>
+        <location line="+7" />
+        <source>Manage</source>
+        <translation>Verwalten</translation>
+    </message>
+    <message>
+        <location line="+7" />
+        <source>Remove from favourites</source>
+        <translation>Aus Favoriten entfernen</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>Add to favourites</source>
+        <translation>Zu Favoriten hinzufügen</translation>
+    </message>
+    <message>
+        <location line="+28" />
         <source>Connect to your node to load contacts</source>
         <translation>Mit deinem Node verbinden, um Kontakte zu laden</translation>
     </message>
@@ -485,9 +505,14 @@
         <translation>Noch keine Kontakte. Repeater und Nodes erscheinen hier, sobald dein Node ihre Adverts empfängt. Tippe auf „Advert“, um dich bekannt zu machen.</translation>
     </message>
     <message>
-        <location line="+58" />
+        <location line="+63" />
         <source>Manage ›</source>
         <translation>Verwalten ›</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>Chat ›</source>
+        <translation>Chat ›</translation>
     </message>
 </context>
 <context>
@@ -521,6 +546,59 @@
         <location line="+1" />
         <source>%1 d ago</source>
         <translation>vor %1 T</translation>
+    </message>
+</context>
+<context>
+    <name>DirectChat</name>
+    <message>
+        <location filename="../qml/DirectChat.qml" line="+38" />
+        <source>sending...</source>
+        <translation>wird gesendet...</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>sent - waiting for confirmation</source>
+        <translation>gesendet - warte auf Bestätigung</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>✓ delivered</source>
+        <translation>✓ zugestellt</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>⚠ no confirmation received</source>
+        <translation>⚠ keine Bestätigung erhalten</translation>
+    </message>
+    <message>
+        <location line="+27" />
+        <source>‹ Contacts</source>
+        <translation>‹ Kontakte</translation>
+    </message>
+    <message>
+        <location line="+19" />
+        <source>Direct message</source>
+        <translation>Direktnachricht</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Not connected to your node</source>
+        <translation>Nicht mit deinem Node verbunden</translation>
+    </message>
+    <message>
+        <location line="+25" />
+        <source>No messages with %1 yet.</source>
+        <translation>Noch keine Nachrichten mit %1.</translation>
+    </message>
+    <message>
+        <location line="+64" />
+        <source>Message to %1...</source>
+        <translation>Nachricht an %1...</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Send</source>
+        <translation>Senden</translation>
     </message>
 </context>
 <context>
@@ -695,7 +773,7 @@
 <context>
     <name>main</name>
     <message>
-        <location filename="../qml/main.qml" line="+215" />
+        <location filename="../qml/main.qml" line="+307" />
         <source>Discover MeshCore Nodes</source>
         <translation>MeshCore-Nodes suchen</translation>
     </message>
@@ -716,12 +794,12 @@
     </message>
     <message>
         <location line="+25" />
-        <location line="+209" />
+        <location line="+217" />
         <source>Connected to: %1</source>
         <translation>Verbunden mit: %1</translation>
     </message>
     <message>
-        <location line="-208" />
+        <location line="-216" />
         <source>%1 device(s) found</source>
         <translation>%1 Gerät(e) gefunden</translation>
     </message>
@@ -767,21 +845,21 @@
     </message>
     <message>
         <location line="+25" />
-        <location line="+696" />
+        <location line="+708" />
         <source>Channels</source>
         <translation>Kanäle</translation>
     </message>
     <message>
-        <location line="-682" />
-        <location line="+536" />
-        <location line="+159" />
+        <location line="-694" />
+        <location line="+547" />
+        <location line="+160" />
         <source>Contacts</source>
         <translation>Kontakte</translation>
     </message>
     <message>
-        <location line="-688" />
+        <location line="-692" />
         <location line="+258" />
-        <location line="+284" />
+        <location line="+288" />
         <location line="+38" />
         <location line="+35" />
         <location line="+41" />
@@ -789,7 +867,7 @@
         <translation>Zurück</translation>
     </message>
     <message>
-        <location line="-644" />
+        <location line="-648" />
         <source>MeshCore Channels</source>
         <translation>MeshCore-Kanäle</translation>
     </message>
@@ -929,7 +1007,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Noch keine Nachrichten in diesem Kanal</translation>
     </message>
     <message>
-        <location line="+88" />
+        <location line="+91" />
         <source>Reply to %1</source>
         <translation>%1 antworten</translation>
     </message>
@@ -939,13 +1017,13 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Mit Route antworten</translation>
     </message>
     <message>
-        <location line="+40" />
-        <location line="+138" />
+        <location line="+41" />
+        <location line="+143" />
         <source>Settings</source>
         <translation>Einstellungen</translation>
     </message>
     <message>
-        <location line="-130" />
+        <location line="-135" />
         <source>App Settings</source>
         <translation>App-Einstellungen</translation>
     </message>

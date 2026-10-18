@@ -177,6 +177,21 @@ DE = {
     "Log in as admin to send commands": "Als Admin anmelden, um Befehle zu senden",
     "Send": "Senden",
 
+    # --- direct messages / contact menu ---------------------------------------------
+    "sending...": "wird gesendet...",
+    "sent - waiting for confirmation": "gesendet - warte auf Bestätigung",
+    "✓ delivered": "✓ zugestellt",
+    "⚠ no confirmation received": "⚠ keine Bestätigung erhalten",
+    "Direct message": "Direktnachricht",
+    "Not connected to your node": "Nicht mit deinem Node verbunden",
+    "No messages with %1 yet.": "Noch keine Nachrichten mit %1.",
+    "Message to %1...": "Nachricht an %1...",
+    "Send message": "Nachricht senden",
+    "Manage": "Verwalten",
+    "Remove from favourites": "Aus Favoriten entfernen",
+    "Add to favourites": "Zu Favoriten hinzufügen",
+    "Chat ›": "Chat ›",
+
     # --- main pages -----------------------------------------------------------------
     "Discover MeshCore Nodes": "MeshCore-Nodes suchen",
     "Scan for Bluetooth devices": "Nach Bluetooth-Geräten suchen",
