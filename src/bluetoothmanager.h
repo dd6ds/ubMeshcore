@@ -99,6 +99,9 @@ class BluetoothManager : public QObject
     /// e.g. "3 message(s) fetched from node at 08:31" - last offline-queue drain.
     Q_PROPERTY(QString lastSyncInfo READ lastSyncInfo NOTIFY syncInfoChanged)
     Q_PROPERTY(int maxChannels READ maxChannels NOTIFY channelsChanged)
+    /// Result of the last "Advert" tap, e.g. "✓ Flood advert sent at 09:41:07".
+    Q_PROPERTY(QString lastAdvertInfo READ lastAdvertInfo NOTIFY advertInfoChanged)
+    Q_PROPERTY(bool lastAdvertOk READ lastAdvertOk NOTIFY advertInfoChanged)
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
@@ -157,6 +160,8 @@ public:
     /// "#name" form of user input, or "" if it is not a usable channel name.
     Q_INVOKABLE QString normalizeChannelName(const QString &name) const;
     int maxChannels() const { return m_maxChannels; }
+    QString lastAdvertInfo() const { return m_lastAdvertInfo; }
+    bool lastAdvertOk() const { return m_advertOk; }
 
     Q_INVOKABLE void selectDevice(const QString &address, const QString &name);
     Q_INVOKABLE bool connectToSelected();
@@ -187,6 +192,7 @@ signals:
     void channelMessage(int channelIdx, const QString &text, const QString &time,
                         double timestamp, const QVariantMap &route);
     void syncInfoChanged();
+    void advertInfoChanged();
     /// A channel slot was added or removed: any stored history and unread
     /// count for that index belong to the previous channel and must go.
     void channelSlotCleared(int channelIdx);
@@ -274,6 +280,13 @@ private:
     QTimer m_messagePollTimer;          // safety poll of the node's queue
 
     int m_maxChannels = 0;              // from DEVICE_INFO; 0 = unknown
+
+    bool m_advertPending = false;       // waiting for OK/ERR to SEND_SELF_ADVERT
+    bool m_advertFlood = true;
+    bool m_advertOk = true;
+    QString m_lastAdvertInfo;
+    QTimer m_advertTimeout;
+    void setAdvertInfo(bool ok, const QString &text);
     QList<QByteArray> m_writeQueue;     // paced outgoing frames
     QTimer m_writeTimer;
     static constexpr int kWriteGapMs = 40;

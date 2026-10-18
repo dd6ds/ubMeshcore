@@ -104,6 +104,29 @@ Item {
                 }
             }
 
+            // Result of the last "Advert" tap - without it there was no way to
+            // tell whether the node actually sent anything.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: BluetoothManager.lastAdvertInfo.length > 0
+                implicitHeight: advertLabel.implicitHeight + Math.round(root.gu * 1.0)
+                radius: 4
+                color: BluetoothManager.lastAdvertOk ? "#e8f5e9" : "#ffebee"
+                border.color: BluetoothManager.lastAdvertOk ? "#81c784" : "#e57373"
+                AppLabel {
+                    id: advertLabel
+                    anchors.fill: parent
+                    anchors.margins: Math.round(root.gu * 0.5)
+                    wrapMode: Text.Wrap
+                    font.pixelSize: root.fontSecondary
+                    color: BluetoothManager.lastAdvertOk ? "#1b5e20" : "#b71c1c"
+                    text: BluetoothManager.lastAdvertInfo
+                          + (BluetoothManager.lastAdvertInfo.indexOf("✓") === 0
+                             ? " - nodes and repeaters in range will list you after receiving it."
+                             : "")
+                }
+            }
+
             AppField {
                 Layout.fillWidth: true
                 placeholderText: "Search name or key..."

@@ -341,7 +341,36 @@ BluetoothManager::BluetoothManager(QObject *parent)
     connect(&m_writeTimer, &QTimer::timeout, this, &BluetoothManager::flushWriteQueue);
 
     connect(&m_companion, &CompanionProtocol::errorReported,
-            this, [this](const QString &what) { emit sendFailed(what); });
+            this, [this](const QString &what) {
+                if (m_advertPending) {
+                    m_advertPending = false;
+                    m_advertTimeout.stop();
+                    setAdvertInfo(false, QStringLiteral("Advert failed: ") + what);
+                    return;
+                }
+                emit sendFailed(what);
+            });
+
+    // --- advert confirmation ---------------------------------------------
+    connect(&m_companion, &CompanionProtocol::okReceived, this, [this]() {
+        if (!m_advertPending)
+            return;
+        m_advertPending = false;
+        m_advertTimeout.stop();
+        setAdvertInfo(true, QStringLiteral("✓ %1 advert sent at %2")
+                                .arg(m_advertFlood ? QStringLiteral("Flood")
+                                                   : QStringLiteral("Zero-hop"))
+                                .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"))));
+        qDebug() << "BluetoothManager:" << m_lastAdvertInfo;
+    });
+    m_advertTimeout.setSingleShot(true);
+    m_advertTimeout.setInterval(8000);
+    connect(&m_advertTimeout, &QTimer::timeout, this, [this]() {
+        if (!m_advertPending)
+            return;
+        m_advertPending = false;
+        setAdvertInfo(false, QStringLiteral("No answer from the node - advert may not have been sent"));
+    });
 
     // The adapter must be known BEFORE the first scan: the "Start Scan" button
     // is only enabled once adapterReady is true, so creating the local device
@@ -738,6 +767,11 @@ void BluetoothManager::onControllerDisconnected()
     m_contactRefreshDebounce.stop();
     m_writeQueue.clear();
     m_writeTimer.stop();
+    if (m_advertPending) {
+        m_advertPending = false;
+        m_advertTimeout.stop();
+        setAdvertInfo(false, QStringLiteral("Connection lost before the node confirmed the advert"));
+    }
     if (m_contactsSyncing) {
         m_contactsSyncing = false;
         emit contactsSyncingChanged();
@@ -1025,9 +1059,25 @@ void BluetoothManager::refreshContacts()
 
 void BluetoothManager::sendAdvert(bool flood)
 {
-    if (!checkSession())
+    if (!checkSession()) {
+        setAdvertInfo(false, QStringLiteral("Advert not sent - not connected to your node"));
         return;
+    }
+    // The node answers SEND_SELF_ADVERT with OK once it has queued the
+    // advert for transmission (ERR if it could not). Commands are answered
+    // in order, so the next OK/ERR after this belongs to it.
+    m_advertPending = true;
+    m_advertFlood = flood;
+    m_advertTimeout.start();
+    setAdvertInfo(true, QStringLiteral("Sending advert..."));
     m_companion.sendSelfAdvert(flood);
+}
+
+void BluetoothManager::setAdvertInfo(bool ok, const QString &text)
+{
+    m_advertOk = ok;
+    m_lastAdvertInfo = text;
+    emit advertInfoChanged();
 }
 
 bool BluetoothManager::loginToNode(const QString &keyHex, const QString &password)

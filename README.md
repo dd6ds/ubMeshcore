@@ -19,6 +19,10 @@ the mesh.
 - **Channels** — read and send messages per channel. Each channel shows only
   its own messages; the history is stored on the phone and survives
   disconnects and app restarts. The last opened channel is reopened on start.
+- **Reply** — long-press a received channel message for *Reply to …*
+  (prefills `@[Sender] `, the mention format MeshCore apps use) or *Reply with
+  route* (adds the path the message took, e.g. `@[Markus] 4 hops:
+  cc4b→2a67→6228→db02`). A short tap still shows the hop-by-hop path.
 - **Add / remove channels** — type a hashtag channel (`#z46` or `z46`) and
   tap *Add*; it is written into the first free slot on the node (secret
   derived from the name, as in every MeshCore client). A name that already
@@ -66,6 +70,7 @@ the mesh.
 | Contacts from adverts, favourites | working |
 | Message path (hops, route, repeater names) | working (verified on live messages) |
 | Unread indicators per channel | working |
+| Reply / reply with route (long press) | implemented, not yet tested on the phone |
 | Add / remove hashtag channels | implemented, not yet tested on the node; private (random-key) channels not supported yet |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
 | Direct (contact) messages | received and decoded, no UI yet |

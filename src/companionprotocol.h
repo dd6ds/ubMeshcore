@@ -162,6 +162,8 @@ signals:
     /// RESP_SENT: the node accepted a send; timeout is its RTT estimate.
     void sendAccepted(quint32 suggestedTimeoutMs);
     void sendAcknowledged();
+    /// Plain RESP_OK (not SENT/confirmations) - the node accepted the command.
+    void okReceived();
     /// The node's offline message queue is empty (RESP_NO_MORE_MESSAGES).
     void noMoreMessages();
     void errorReported(const QString &what);

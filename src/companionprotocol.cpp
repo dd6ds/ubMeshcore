@@ -593,6 +593,7 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         break;
 
     case RespOk:
+        emit okReceived();
         emit sendAcknowledged();
         break;
 

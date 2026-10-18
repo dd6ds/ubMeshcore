@@ -53,6 +53,27 @@ ApplicationWindow {
         onChannelSlotCleared: rootWindow.clearChannelHistory(channelIdx)
     }
 
+    // "4 hops · cc4b › 2a67 › 6228 › db02" -> "4 hops: cc4b→2a67→6228→db02",
+    // the compact form ping bots use in their replies. Summaries without a
+    // recorded path ("3 hops", "direct", "0 hops - heard directly") stay as is.
+    function compactRoute(route) {
+        var sep = route.indexOf(" · ")
+        if (sep < 0)
+            return route
+        return route.substring(0, sep) + ": "
+                + route.substring(sep + 3).split(" › ").join("→")
+    }
+
+    // Prefills the input with a MeshCore mention ("@[name] ") - the format
+    // other MeshCore apps show as a reply - plus optional extra text.
+    function startReply(sender, extra) {
+        var text = "@[" + sender + "] " + (extra.length ? extra + " " : "")
+        messageInput.text = text
+        messageInput.cursorPosition = text.length
+        messageInput.forceActiveFocus()
+        Qt.inputMethod.show()
+    }
+
     function clearChannelHistory(idx) {
         for (var i = messageList.count - 1; i >= 0; --i) {
             if (messageList.get(i).channel === idx)
@@ -882,10 +903,48 @@ ApplicationWindow {
                             }
                         }
                         property bool expanded: false
-                        MouseArea {
+                        // Received messages only - not our own or status lines.
+                        readonly property bool replyable: model.sender !== "You" && model.sender !== "!"
+                        Rectangle {
                             anchors.fill: parent
-                            enabled: model.routeDetail.length > 0
-                            onClicked: messageDelegate.expanded = !messageDelegate.expanded
+                            z: -1
+                            color: messageMouse.pressed && messageDelegate.replyable
+                                   ? "#e3edf9" : "transparent"
+                        }
+                        MouseArea {
+                            id: messageMouse
+                            anchors.fill: parent
+                            // Tap: show/hide the hop-by-hop path.
+                            onClicked: {
+                                if (model.routeDetail.length > 0)
+                                    messageDelegate.expanded = !messageDelegate.expanded
+                            }
+                            // Long press: reply menu.
+                            onPressAndHold: {
+                                if (!messageDelegate.replyable)
+                                    return
+                                messageMenu.sender = model.sender
+                                messageMenu.route = model.route
+                                var p = mapToItem(messageView, mouse.x, mouse.y)
+                                messageMenu.popup(messageView, p.x, p.y)
+                            }
+                        }
+                    }
+
+                    Menu {
+                        id: messageMenu
+                        property string sender: ""
+                        property string route: ""
+                        MenuItem {
+                            text: "Reply to " + messageMenu.sender
+                            onTriggered: rootWindow.startReply(messageMenu.sender, "")
+                        }
+                        MenuItem {
+                            text: "Reply with route"
+                            enabled: messageMenu.route.length > 0
+                            onTriggered: rootWindow.startReply(
+                                             messageMenu.sender,
+                                             rootWindow.compactRoute(messageMenu.route))
                         }
                     }
                 }
