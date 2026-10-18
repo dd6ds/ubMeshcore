@@ -41,6 +41,8 @@ QString CompanionProtocol::commandName(quint8 code)
     case CmdGetDeviceTime:     return QStringLiteral("GET_DEVICE_TIME");
     case CmdSetDeviceTime:     return QStringLiteral("SET_DEVICE_TIME");
     case CmdSendSelfAdvert:    return QStringLiteral("SEND_SELF_ADVERT");
+    case CmdAddUpdateContact:  return QStringLiteral("ADD_UPDATE_CONTACT");
+    case CmdRemoveContact:     return QStringLiteral("REMOVE_CONTACT");
     case CmdSyncNextMessage:   return QStringLiteral("SYNC_NEXT_MESSAGE");
     case CmdDeviceQuery:       return QStringLiteral("DEVICE_QUERY");
     case CmdSendLogin:         return QStringLiteral("SEND_LOGIN");
@@ -139,6 +141,41 @@ void CompanionProtocol::sendDeviceQuery()
     QByteArray frame;
     frame.append(char(CmdDeviceQuery));
     frame.append(char(3));          // app protocol version we understand
+    emitFrame(frame);
+}
+
+void CompanionProtocol::addUpdateContact(const MeshContact &c)
+{
+    // 09 <pub_key:32> <type:1> <flags:1> <out_path_len:i8> <out_path:64>
+    //    <adv_name:32, NUL-padded> <last_advert:u32> <adv_lat:i32> <adv_lon:i32>
+    if (c.publicKey.size() != 32)
+        return;
+    QByteArray path = c.outPath.left(64);
+    path.append(64 - path.size(), char(0));
+    QByteArray name = c.name.toUtf8().left(31);
+    name.append(32 - name.size(), char(0));
+
+    QByteArray frame;
+    frame.append(char(CmdAddUpdateContact));
+    frame.append(c.publicKey);
+    frame.append(char(c.type));
+    frame.append(char(c.flags));
+    frame.append(char(c.outPathLen));
+    frame.append(path);
+    frame.append(name);
+    appendLE32(frame, c.lastAdvert);
+    appendLE32(frame, quint32(qint32(qRound(c.lat * 1e6))));
+    appendLE32(frame, quint32(qint32(qRound(c.lon * 1e6))));
+    emitFrame(frame);
+}
+
+void CompanionProtocol::removeContact(const QByteArray &publicKey)
+{
+    if (publicKey.size() != 32)
+        return;
+    QByteArray frame;
+    frame.append(char(CmdRemoveContact));
+    frame.append(publicKey);
     emitFrame(frame);
 }
 
@@ -273,6 +310,7 @@ bool CompanionProtocol::parseContact(const QByteArray &payload, MeshContact *out
     c.type = quint8(payload.at(32));
     c.flags = quint8(payload.at(33));
     c.outPathLen = qint8(payload.at(34));
+    c.outPath = payload.mid(35, 64);
 
     const QByteArray nameField = payload.mid(kName, 32);
     const int nul = nameField.indexOf('\0');
@@ -491,8 +529,11 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         const int fwVer = payload.isEmpty() ? 0 : int(quint8(payload.at(0)));
         const int maxChannels = (fwVer >= 3 && payload.size() >= 3)
                                     ? int(quint8(payload.at(2))) : 0;
-        qDebug() << "Companion: DEVICE_INFO fw" << fwVer << "max channels" << maxChannels;
-        emit deviceInfoReceived(fwVer, maxChannels);
+        const int maxContacts = (fwVer >= 3 && payload.size() >= 2)
+                                    ? int(quint8(payload.at(1))) * 2 : 0;
+        qDebug() << "Companion: DEVICE_INFO fw" << fwVer << "max channels" << maxChannels
+                 << "max contacts" << maxContacts;
+        emit deviceInfoReceived(fwVer, maxChannels, maxContacts);
         break;
     }
 
@@ -547,6 +588,9 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
     case PushNewAdvert: {
         MeshContact contact;
         if (parseContact(payload, &contact)) {
+            // PUSH_NEW_ADVERT is sent for adverts the node did NOT add to its
+            // table (manual-add mode, or the table is full).
+            contact.onNode = (code == RespContact);
             qDebug() << "Companion: contact" << contact.name
                      << ContactListModel::typeName(contact.type)
                      << "hops" << contact.outPathLen;

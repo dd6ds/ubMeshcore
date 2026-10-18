@@ -99,6 +99,7 @@ class BluetoothManager : public QObject
     /// e.g. "3 message(s) fetched from node at 08:31" - last offline-queue drain.
     Q_PROPERTY(QString lastSyncInfo READ lastSyncInfo NOTIFY syncInfoChanged)
     Q_PROPERTY(int maxChannels READ maxChannels NOTIFY channelsChanged)
+    Q_PROPERTY(int maxContacts READ maxContacts NOTIFY contactLimitChanged)
     /// Result of the last "Advert" tap, e.g. "✓ Flood advert sent at 09:41:07".
     Q_PROPERTY(QString lastAdvertInfo READ lastAdvertInfo NOTIFY advertInfoChanged)
     Q_PROPERTY(bool lastAdvertOk READ lastAdvertOk NOTIFY advertInfoChanged)
@@ -145,6 +146,16 @@ public:
     /// Requires a successful admin login first.
     Q_INVOKABLE bool sendNodeCommand(const QString &keyHex, const QString &command);
     Q_INVOKABLE bool sendDirectMessage(const QString &keyHex, const QString &text);
+    /// Stores a contact (known only from an advert) in the node's table.
+    Q_INVOKABLE bool saveContactToNode(const QString &keyHex);
+    /// Deletes a contact: from the node's table (if stored there) and from
+    /// the list. It comes back when its advert is heard again.
+    Q_INVOKABLE bool removeContactFromNode(const QString &keyHex);
+    /// Deletes several contacts; returns how many were deleted. Commands are
+    /// paced by the write queue, so large batches are fine.
+    Q_INVOKABLE int deleteContacts(const QStringList &keyHexes);
+    /// Size of the node's contact table (from DEVICE_INFO), 0 = unknown.
+    int maxContacts() const { return m_maxContacts; }
 
     // --- channel management -------------------------------------------------
     /// Adds a hashtag channel ("#z46" or "z46") in the first free slot; the
@@ -193,6 +204,7 @@ signals:
                         double timestamp, const QVariantMap &route);
     void syncInfoChanged();
     void advertInfoChanged();
+    void contactLimitChanged();
     /// A channel slot was added or removed: any stored history and unread
     /// count for that index belong to the previous channel and must go.
     void channelSlotCleared(int channelIdx);
@@ -285,6 +297,8 @@ private:
     QTimer m_messagePollTimer;          // safety poll of the node's queue
 
     int m_maxChannels = 0;              // from DEVICE_INFO; 0 = unknown
+    int m_maxContacts = 0;              // node contact table size, 0 = unknown
+    bool storeContactOnNode(const MeshContact &c);
 
     bool m_advertPending = false;       // waiting for OK/ERR to SEND_SELF_ADVERT
     bool m_advertFlood = true;

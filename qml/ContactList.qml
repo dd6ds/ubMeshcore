@@ -88,6 +88,7 @@ Item {
         property string contactName: ""
         property string contactType: ""
         property bool favorite: false
+        property bool onNode: true
         MenuItem {
             text: qsTr("Send message")
             // Direct messages go to companions; repeaters take CLI commands.
@@ -106,6 +107,88 @@ Item {
             text: contactMenu.favorite ? qsTr("Remove from favourites") : qsTr("Add to favourites")
             onTriggered: BluetoothManager.contactsModel.toggleFavorite(contactMenu.keyHex)
         }
+        // The node's contact table is limited (e.g. 350 entries); these
+        // manage what is stored there.
+        MenuItem {
+            text: qsTr("Save to node")
+            visible: !contactMenu.onNode
+            height: visible ? implicitHeight : 0
+            onTriggered: BluetoothManager.saveContactToNode(contactMenu.keyHex)
+        }
+        MenuItem {
+            text: qsTr("Delete contact")
+            onTriggered: root.confirmDelete([contactMenu.keyHex], contactMenu.contactName)
+        }
+    }
+
+    // --- deleting contacts ----------------------------------------------------
+    // Single (long-press menu) and multiple (selection mode) deletes share one
+    // confirmation dialog.
+    function confirmDelete(keys, singleName) {
+        deleteDialog.keys = keys
+        deleteDialog.singleName = singleName
+        deleteDialog.open()
+    }
+
+    property bool selectMode: false
+    property var selected: ({})          // key -> true; reassigned on change
+    readonly property int selectedCount: Object.keys(selected).length
+
+    function toggleSelected(key) {
+        var s = Object.assign({}, selected)
+        if (s[key]) delete s[key]; else s[key] = true
+        selected = s
+    }
+    function selectKeys(keys) {
+        var s = Object.assign({}, selected)
+        for (var i = 0; i < keys.length; ++i)
+            s[keys[i]] = true
+        selected = s
+    }
+    function endSelectMode() {
+        selected = ({})
+        selectMode = false
+    }
+
+    Dialog {
+        id: deleteDialog
+        property var keys: []
+        property string singleName: ""
+        modal: true
+        width: Math.max(Math.round(root.gu * 20),
+                        Math.min(root.width - 2 * root.spacingUnit, Math.round(root.gu * 40)))
+        x: (root.width - width) / 2
+        y: (root.height - height) / 3
+        title: keys.length === 1 ? qsTr("Delete contact") : qsTr("Delete contacts")
+        standardButtons: Dialog.Yes | Dialog.Cancel
+        // The text sits in a plain Item with its own implicit size, so the
+        // dialog's height does not feed back into the text's wrapping width
+        // (that was the "binding loop" warning).
+        contentItem: Item {
+            implicitHeight: deleteText.implicitHeight
+            AppLabel {
+                id: deleteText
+                width: parent.width
+                wrapMode: Text.Wrap
+                text: (deleteDialog.keys.length === 1
+                       ? qsTr("Delete %1?").arg(deleteDialog.singleName)
+                       : qsTr("Delete %1 contacts?").arg(deleteDialog.keys.length))
+                      + "\n\n"
+                      + qsTr("They are removed from your node and from this list. A contact "
+                             + "shows up again the next time its advert is heard.")
+            }
+        }
+        onAccepted: {
+            BluetoothManager.deleteContacts(keys)
+            root.endSelectMode()
+        }
+    }
+
+    // Errors from saving/removing contacts (e.g. the node's list is full).
+    property string lastError: ""
+    Connections {
+        target: BluetoothManager
+        onSendFailed: root.lastError = reason
     }
 
     Component {
@@ -134,7 +217,12 @@ Item {
                           ? qsTr("Connect to your node to load contacts")
                           : BluetoothManager.contactsSyncing
                             ? qsTr("Loading contacts...")
-                            : qsTr("%1 contact(s) from received adverts").arg(BluetoothManager.contactsModel.count)
+                            : BluetoothManager.maxContacts > 0
+                              ? qsTr("%1 contact(s) · %2 of %3 stored on your node")
+                                .arg(BluetoothManager.contactsModel.count)
+                                .arg(BluetoothManager.contactsModel.nodeCount)
+                                .arg(BluetoothManager.maxContacts)
+                              : qsTr("%1 contact(s) from received adverts").arg(BluetoothManager.contactsModel.count)
                 }
                 Button {
                     text: qsTr("Refresh")
@@ -145,6 +233,99 @@ Item {
                     text: qsTr("Advert")
                     enabled: BluetoothManager.sessionReady
                     onClicked: BluetoothManager.sendAdvert(true)
+                }
+                Button {
+                    text: root.selectMode ? qsTr("Done") : qsTr("Select")
+                    enabled: BluetoothManager.sessionReady || root.selectMode
+                    onClicked: root.selectMode ? root.endSelectMode() : (root.selectMode = true)
+                }
+            }
+
+            // Selection mode: tap contacts to select, then delete them together.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: root.selectMode
+                implicitHeight: selectRow.implicitHeight + Math.round(root.gu * 1.0)
+                radius: 4
+                color: "#fff8e1"
+                border.color: "#ffb300"
+                RowLayout {
+                    id: selectRow
+                    anchors.fill: parent
+                    anchors.margins: Math.round(root.gu * 0.5)
+                    spacing: root.spacingUnit
+                    AppLabel {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        font.pixelSize: root.fontSecondary
+                        text: root.selectedCount === 0
+                              ? qsTr("Tap contacts to select them")
+                              : qsTr("%1 selected").arg(root.selectedCount)
+                    }
+                    Button {
+                        id: quickSelectButton
+                        text: qsTr("Select ▾")
+                        font.pixelSize: root.fontSecondary
+                        onClicked: quickSelectMenu.popup(quickSelectButton, 0, quickSelectButton.height)
+                    }
+                    // Quick selections. Favourites are kept out of every one
+                    // except "All" - deleting them should always be deliberate.
+                    Menu {
+                        id: quickSelectMenu
+                        MenuItem {
+                            text: qsTr("All except favourites")
+                            onTriggered: root.selectKeys(
+                                             BluetoothManager.contactsModel.allKeys(true))
+                        }
+                        MenuItem {
+                            text: qsTr("Inactive for 7 days")
+                            onTriggered: root.selectKeys(
+                                             BluetoothManager.contactsModel.inactiveKeys(7, true))
+                        }
+                        MenuItem {
+                            text: qsTr("Inactive for 30 days")
+                            onTriggered: root.selectKeys(
+                                             BluetoothManager.contactsModel.inactiveKeys(30, true))
+                        }
+                        MenuItem {
+                            text: qsTr("All (including favourites)")
+                            onTriggered: root.selectKeys(
+                                             BluetoothManager.contactsModel.allKeys(false))
+                        }
+                        MenuItem {
+                            text: qsTr("Clear selection")
+                            enabled: root.selectedCount > 0
+                            onTriggered: root.selected = ({})
+                        }
+                    }
+                    Button {
+                        text: qsTr("Delete")
+                        enabled: root.selectedCount > 0
+                        onClicked: root.confirmDelete(Object.keys(root.selected), "")
+                    }
+                }
+            }
+
+            // Last error from saving/removing a contact - tap to dismiss.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: root.lastError.length > 0
+                implicitHeight: contactErrorLabel.implicitHeight + Math.round(root.gu * 1.0)
+                radius: 4
+                color: "#ffebee"
+                border.color: "#e57373"
+                AppLabel {
+                    id: contactErrorLabel
+                    anchors.fill: parent
+                    anchors.margins: Math.round(root.gu * 0.5)
+                    wrapMode: Text.Wrap
+                    font.pixelSize: root.fontSecondary
+                    color: "#b71c1c"
+                    text: root.lastError
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.lastError = ""
                 }
             }
 
@@ -267,7 +448,8 @@ Item {
                         width: parent.width
                         height: Math.round(root.gu * 7.5)
                         radius: Math.round(root.gu * 0.5)
-                        color: tap.pressed ? "#d6e8ff" : "#f5f5f5"
+                        readonly property bool isSelected: root.selectMode && root.selected[publicKey] === true
+                        color: isSelected ? "#ffe0b2" : (tap.pressed ? "#d6e8ff" : "#f5f5f5")
                         border.color: root.typeColor(type)
                         border.width: 2
                         opacity: isActive ? 1.0 : 0.6
@@ -277,6 +459,25 @@ Item {
                             anchors.fill: parent
                             anchors.margins: Math.round(root.gu * 0.8)
                             spacing: root.spacingUnit
+
+                            // Selection box (selection mode only).
+                            Rectangle {
+                                visible: root.selectMode
+                                Layout.preferredWidth: Math.round(root.gu * 2.6)
+                                Layout.preferredHeight: Layout.preferredWidth
+                                radius: 4
+                                border.color: "#e65100"
+                                border.width: 2
+                                color: card.isSelected ? "#e65100" : "white"
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: card.isSelected
+                                    text: "✓"
+                                    color: "white"
+                                    font.bold: true
+                                    font.pixelSize: Math.round(root.gu * 1.8)
+                                }
+                            }
 
                             Rectangle {
                                 Layout.preferredWidth: Math.round(root.gu * 1.2)
@@ -299,7 +500,10 @@ Item {
                                     Layout.fillWidth: true
                                     text: root.typeLabel(type) + "  ·  " + root.hopsText(hops)
                                           + "  ·  " + lastHeardText
-                                    color: "#555"
+                                          + (onNode ? "" : "  ·  " + qsTr("not on node"))
+                                    // Orange: heard, but not in the node's table -
+                                    // direct messages save it there first.
+                                    color: onNode ? "#555" : "#e65100"
                                     font.pixelSize: root.fontSecondary
                                     elide: Text.ElideRight
                                 }
@@ -338,18 +542,26 @@ Item {
                             id: tap
                             anchors.fill: parent
                             // Tap: chat with companions, admin for repeaters/rooms.
+                            // In selection mode a tap (de)selects instead.
                             onClicked: {
-                                if (type === "chat")
+                                if (root.selectMode)
+                                    root.toggleSelected(publicKey)
+                                else if (type === "chat")
                                     root.openChat(publicKey, name)
                                 else if (manageable)
                                     root.openAdmin(publicKey, name, type)
                             }
                             // Long press: menu with all options.
                             onPressAndHold: {
+                                if (root.selectMode) {
+                                    root.toggleSelected(publicKey)
+                                    return
+                                }
                                 contactMenu.keyHex = publicKey
                                 contactMenu.contactName = name
                                 contactMenu.contactType = type
                                 contactMenu.favorite = isFavorite
+                                contactMenu.onNode = onNode
                                 var p = mapToItem(root, mouse.x, mouse.y)
                                 contactMenu.popup(root, p.x, p.y)
                             }

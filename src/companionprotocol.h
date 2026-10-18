@@ -50,6 +50,8 @@ public:
         CmdGetDeviceTime     = 5,
         CmdSetDeviceTime     = 6,
         CmdSendSelfAdvert    = 7,
+        CmdAddUpdateContact  = 9,
+        CmdRemoveContact     = 15,
         CmdSyncNextMessage   = 10,
         CmdDeviceQuery       = 22,
         CmdSendLogin         = 26,
@@ -106,6 +108,10 @@ public:
     void requestChannel(int channelIdx);
     /// CMD_DEVICE_QUERY (app protocol v3) -> RESP_DEVICE_INFO with max_channels.
     void sendDeviceQuery();
+    /// CMD_ADD_UPDATE_CONTACT: store a contact in the node's table.
+    void addUpdateContact(const MeshContact &contact);
+    /// CMD_REMOVE_CONTACT: delete a contact from the node's table.
+    void removeContact(const QByteArray &publicKey);
     /// CMD_SET_CHANNEL: <idx> <name:32, NUL-padded> <secret:16>. An empty name
     /// with an all-zero secret deletes the slot.
     void setChannel(int channelIdx, const QString &name, const QByteArray &secret16);
@@ -139,7 +145,7 @@ signals:
     void writeRequested(const QByteArray &data);
 
     void selfInfoReceived(const QString &name);
-    void deviceInfoReceived(int firmwareVersion, int maxChannels);
+    void deviceInfoReceived(int firmwareVersion, int maxChannels, int maxContacts);
     /// Emitted for empty slots too (name empty), so free slots are known.
     void channelInfoReceived(int channelIdx, const QString &name);
     void channelMessageReceived(int channelIdx, const QString &text, quint32 timestamp,

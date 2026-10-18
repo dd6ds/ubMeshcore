@@ -191,6 +191,32 @@ DE = {
     "Remove from favourites": "Aus Favoriten entfernen",
     "Add to favourites": "Zu Favoriten hinzufügen",
     "Chat ›": "Chat ›",
+    "Save to node": "Auf Node speichern",
+    "Delete contact": "Kontakt löschen",
+    "Delete contacts": "Kontakte löschen",
+    "Delete %1?": "%1 löschen?",
+    "Delete %1 contacts?": "%1 Kontakte löschen?",
+    "They are removed from your node and from this list. A contact shows up again the next time its advert is heard.":
+        "Sie werden von deinem Node und aus dieser Liste entfernt. Ein Kontakt erscheint wieder, "
+        "sobald sein Advert erneut empfangen wird.",
+    "Done": "Fertig",
+    "Select": "Auswählen",
+    "Tap contacts to select them": "Kontakte zum Auswählen antippen",
+    "%1 selected": "%1 ausgewählt",
+    "Select ▾": "Auswahl ▾",
+    "All except favourites": "Alle außer Favoriten",
+    "Inactive for 7 days": "7 Tage inaktiv",
+    "Inactive for 30 days": "30 Tage inaktiv",
+    "All (including favourites)": "Alle (inkl. Favoriten)",
+    "Clear selection": "Auswahl aufheben",
+    "Delete": "Löschen",
+    "%1 contact(s) · %2 of %3 stored on your node": "%1 Kontakt(e) · %2 von %3 auf deinem Node gespeichert",
+    "not on node": "nicht auf dem Node",
+    "%1 is not stored on your node yet. Sending a message saves it there first.":
+        "%1 ist noch nicht auf deinem Node gespeichert. Beim Senden wird der Kontakt zuerst dort gespeichert.",
+    "Your node's contact list is full (%1 of %2). Remove a contact first: long-press it in the contact list → Delete contact.":
+        "Die Kontaktliste deines Nodes ist voll (%1 von %2). Entferne zuerst einen Kontakt: "
+        "in der Kontaktliste lange drücken → Kontakt löschen (oder „Auswählen“ für mehrere).",
 
     # --- main pages -----------------------------------------------------------------
     "Discover MeshCore Nodes": "MeshCore-Nodes suchen",

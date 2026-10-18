@@ -53,6 +53,13 @@ the mesh.
   messages land in that chat, are kept in the history and show an unread
   badge on the contact and on the *Contacts* button. Long-press on any
   contact also offers *Manage* (repeaters/rooms) and favourite on/off.
+- **Delete contacts** — long-press → *Delete contact*, or *Select* to pick
+  several (tap to select, or quick select via *Select ▾*: all except
+  favourites, inactive for 7 / 30 days — favourites excluded —, all including
+  favourites, clear selection) and delete them together after a
+  confirmation. Deleted from the node's table and from the list; a contact
+  comes back when its advert is heard again. Useful when the node's contact
+  table is full.
 - **Favourites** — star any contact; favourites sort to the top. Stored on the
   phone, so they survive re-syncs and restarts.
 - **Repeater / room server admin** — login with password (admin or guest),
@@ -84,7 +91,8 @@ the mesh.
 | Reply / reply with route (long press) | implemented, not yet tested on the phone |
 | Add / remove hashtag channels | implemented, not yet tested on the node; private (random-key) channels not supported yet |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
-| Direct messages (chat, delivery confirmation) | implemented, not yet tested on the phone; delivery state is not kept across restarts |
+| Direct messages (chat, delivery confirmation) | implemented; delivery state is not kept across restarts |
+| Node contact table (full-table handling, save / remove contact) | implemented, not yet tested on the node |
 | Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
 
 ## Requirements
@@ -348,6 +356,17 @@ a FIFO with one entry per command that produces one (DM, channel text, login,
 status, CLI) and pops it in order; DM entries carry the contact key. A DM
 without a confirmation within the node's suggested timeout + 5 s is shown as
 unconfirmed.
+
+**The node's contact table is limited** — `max_contacts` = byte 2 of
+`DEVICE_INFO` × 2 (350 on a Heltec V4). Once it is full, the node no longer
+stores new adverts and only reports them as `PUSH_NEW_ADVERT` (`0x8a`, same
+layout as a contact); manual-add mode does the same. The node can only send
+direct messages to contacts **in its table** — for anything else
+`SEND_TXT_MSG` returns `ERR 02` (not found). The app therefore marks
+contacts known only from `0x8a` as *not on node* (orange) and stores them
+with `ADD_UPDATE_CONTACT` (`0x09`) before a DM; if the table is full it says
+so instead of sending. *Delete contact* (`REMOVE_CONTACT`, `0x0f`; also in
+bulk via *Select*) frees places. The contacts page shows `x of 350 stored on your node`.
 
 **Channel slots.** The node has `max_channels` slots (1, 8 or 40 depending on
 the board). All of them are read on connect, empty ones included, so the app

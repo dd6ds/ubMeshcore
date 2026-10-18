@@ -808,12 +808,19 @@ ApplicationWindow {
                 y: (parent.height - height) / 3
                 title: qsTr("Remove channel")
                 standardButtons: Dialog.Yes | Dialog.Cancel
-                contentItem: AppLabel {
-                    wrapMode: Text.Wrap
-                    text: qsTr("Remove %1 from your node?\n\n"
-                               + "Its message history in the app is deleted too. You can add "
-                               + "the channel again later by typing its name.")
-                          .arg(removeDialog.channelName)
+                // Text in a plain Item: keeps the dialog height from feeding
+                // back into the wrapping width ("binding loop" warning).
+                contentItem: Item {
+                    implicitHeight: removeText.implicitHeight
+                    AppLabel {
+                        id: removeText
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: qsTr("Remove %1 from your node?\n\n"
+                                   + "Its message history in the app is deleted too. You can add "
+                                   + "the channel again later by typing its name.")
+                              .arg(removeDialog.channelName)
+                    }
                 }
                 onAccepted: {
                     if (BluetoothManager.removeChannel(channelIdx))

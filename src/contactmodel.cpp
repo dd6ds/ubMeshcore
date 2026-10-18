@@ -120,6 +120,7 @@ QVariant ContactListModel::data(const QModelIndex &index, int role) const
     case LonRole:           return c.lon;
     case HasLocationRole:   return !(c.lat == 0.0 && c.lon == 0.0);
     case FavoriteRole:      return m_favorites.contains(QString::fromLatin1(c.publicKey.toHex()));
+    case OnNodeRole:        return c.onNode;
     default:                return QVariant();
     }
 }
@@ -138,7 +139,8 @@ QHash<int, QByteArray> ContactListModel::roleNames() const
         { LatRole,           "lat" },
         { LonRole,           "lon" },
         { HasLocationRole,   "hasLocation" },
-        { FavoriteRole,      "isFavorite" }
+        { FavoriteRole,      "isFavorite" },
+        { OnNodeRole,        "onNode" }
     };
 }
 
@@ -185,6 +187,74 @@ void ContactListModel::upsert(const MeshContact &contact)
     sortByRecency();
     endResetModel();
     emit countChanged();
+}
+
+bool ContactListModel::isOnNode(const QString &keyHex) const
+{
+    const MeshContact *c = findByKeyHex(keyHex);
+    return c ? c->onNode : true;
+}
+
+QStringList ContactListModel::inactiveKeys(int days, bool skipFavorites) const
+{
+    const qint64 cutoff = QDateTime::currentSecsSinceEpoch() - qint64(days) * 86400;
+    QStringList keys;
+    for (const MeshContact &c : m_contacts) {
+        const QString key = QString::fromLatin1(c.publicKey.toHex());
+        if (skipFavorites && m_favorites.contains(key))
+            continue;
+        if (qint64(c.lastHeard()) < cutoff)
+            keys << key;
+    }
+    return keys;
+}
+
+QStringList ContactListModel::allKeys(bool skipFavorites) const
+{
+    QStringList keys;
+    for (const MeshContact &c : m_contacts) {
+        const QString key = QString::fromLatin1(c.publicKey.toHex());
+        if (skipFavorites && m_favorites.contains(key))
+            continue;
+        keys << key;
+    }
+    return keys;
+}
+
+int ContactListModel::nodeCount() const
+{
+    int n = 0;
+    for (const MeshContact &c : m_contacts)
+        if (c.onNode)
+            ++n;
+    return n;
+}
+
+void ContactListModel::setOnNode(const QByteArray &publicKey, bool onNode)
+{
+    for (int i = 0; i < m_contacts.size(); ++i) {
+        if (m_contacts.at(i).publicKey == publicKey) {
+            if (m_contacts.at(i).onNode == onNode)
+                return;
+            m_contacts[i].onNode = onNode;
+            emit dataChanged(index(i), index(i), { OnNodeRole });
+            emit countChanged();
+            return;
+        }
+    }
+}
+
+void ContactListModel::removeContact(const QByteArray &publicKey)
+{
+    for (int i = 0; i < m_contacts.size(); ++i) {
+        if (m_contacts.at(i).publicKey == publicKey) {
+            beginRemoveRows(QModelIndex(), i, i);
+            m_contacts.removeAt(i);
+            endRemoveRows();
+            emit countChanged();
+            return;
+        }
+    }
 }
 
 void ContactListModel::clearContacts()

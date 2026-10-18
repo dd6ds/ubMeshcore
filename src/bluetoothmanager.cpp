@@ -307,7 +307,11 @@ BluetoothManager::BluetoothManager(QObject *parent)
                 emit channelsChanged();
             });
     connect(&m_companion, &CompanionProtocol::deviceInfoReceived,
-            this, [this](int, int maxChannels) {
+            this, [this](int, int maxChannels, int maxContacts) {
+                if (maxContacts > 0 && maxContacts != m_maxContacts) {
+                    m_maxContacts = maxContacts;
+                    emit contactLimitChanged();
+                }
                 if (maxChannels <= 0 || m_maxChannels > 0)
                     return;
                 m_maxChannels = maxChannels;
@@ -1149,14 +1153,86 @@ bool BluetoothManager::sendDirectMessage(const QString &keyHex, const QString &t
 {
     if (text.trimmed().isEmpty() || !checkSession())
         return false;
-    const MeshContact *c = m_contacts.findByKeyHex(keyHex);
-    if (!c) {
+    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
+    if (!found) {
         emit sendFailed(tr("Unknown contact"));
         return false;
     }
-    m_sentFifo.append(QString::fromLatin1(c->publicKey.toHex()));
-    m_companion.sendDirectText(c->publicKey, text.trimmed(), CompanionProtocol::TxtPlain);
+    const MeshContact c = *found;
+    // The node only sends to contacts in its own table - otherwise it answers
+    // "not found". Contacts known only from an advert it did not store (its
+    // table is full, or manual-add mode) are saved first.
+    if (!c.onNode) {
+        if (!storeContactOnNode(c))
+            return false;
+    }
+    m_sentFifo.append(QString::fromLatin1(c.publicKey.toHex()));
+    m_companion.sendDirectText(c.publicKey, text.trimmed(), CompanionProtocol::TxtPlain);
     return true;
+}
+
+bool BluetoothManager::storeContactOnNode(const MeshContact &c)
+{
+    if (m_maxContacts > 0 && m_contacts.nodeCount() >= m_maxContacts) {
+        emit sendFailed(tr("Your node's contact list is full (%1 of %2). Remove a contact "
+                           "first: long-press it in the contact list → Delete contact.")
+                            .arg(m_contacts.nodeCount()).arg(m_maxContacts));
+        return false;
+    }
+    qDebug() << "BluetoothManager: storing contact on node:" << c.name;
+    m_companion.addUpdateContact(c);
+    m_contacts.setOnNode(c.publicKey, true);
+    return true;
+}
+
+bool BluetoothManager::saveContactToNode(const QString &keyHex)
+{
+    if (!checkSession())
+        return false;
+    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
+    if (!found) {
+        emit sendFailed(tr("Unknown contact"));
+        return false;
+    }
+    if (found->onNode)
+        return true;
+    return storeContactOnNode(*found);
+}
+
+bool BluetoothManager::removeContactFromNode(const QString &keyHex)
+{
+    if (!checkSession())
+        return false;
+    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
+    if (!found) {
+        emit sendFailed(tr("Unknown contact"));
+        return false;
+    }
+    const QByteArray key = found->publicKey;
+    // Only contacts in the node's table exist there; the others (known only
+    // from an advert the node did not store) are just dropped from the list.
+    if (found->onNode) {
+        qDebug() << "BluetoothManager: removing contact from node:" << found->name;
+        m_companion.removeContact(key);
+    } else {
+        qDebug() << "BluetoothManager: dropping contact (not on node):" << found->name;
+    }
+    // It reappears the next time its advert is heard.
+    m_contacts.removeContact(key);
+    return true;
+}
+
+int BluetoothManager::deleteContacts(const QStringList &keyHexes)
+{
+    if (!checkSession())
+        return 0;
+    int n = 0;
+    for (const QString &k : keyHexes) {
+        if (removeContactFromNode(k))
+            ++n;
+    }
+    qDebug() << "BluetoothManager: deleted" << n << "contact(s)";
+    return n;
 }
 
 namespace {

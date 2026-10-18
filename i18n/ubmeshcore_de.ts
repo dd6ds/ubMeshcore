@@ -13,7 +13,7 @@
         <translation>Sitzung gestartet - </translation>
     </message>
     <message>
-        <location line="+142" />
+        <location line="+146" />
         <source>%1 message(s) fetched from node at %2</source>
         <translation>%1 Nachricht(en) um %2 vom Node abgerufen</translation>
     </message>
@@ -215,11 +215,18 @@
     </message>
     <message>
         <location line="+14" />
+        <location line="+36" />
+        <location line="+14" />
         <source>Unknown contact</source>
         <translation>Unbekannter Kontakt</translation>
     </message>
     <message>
-        <location line="+24" />
+        <location line="-31" />
+        <source>Your node's contact list is full (%1 of %2). Remove a contact first: long-press it in the contact list → Delete contact.</source>
+        <translation>Die Kontaktliste deines Nodes ist voll (%1 von %2). Entferne zuerst einen Kontakt: in der Kontaktliste lange drücken → Kontakt löschen (oder „Auswählen“ für mehrere).</translation>
+    </message>
+    <message>
+        <location line="+77" />
         <source>%1 d %2 h</source>
         <translation>%1 T %2 Std.</translation>
     </message>
@@ -322,7 +329,7 @@
 <context>
     <name>CompanionProtocol</name>
     <message>
-        <location filename="../src/companionprotocol.cpp" line="+607" />
+        <location filename="../src/companionprotocol.cpp" line="+651" />
         <source>unsupported command</source>
         <translation>nicht unterstützter Befehl</translation>
     </message>
@@ -410,7 +417,7 @@
         <translation>%1 Hops</translation>
     </message>
     <message>
-        <location line="+34" />
+        <location line="+35" />
         <source>Send message</source>
         <translation>Nachricht senden</translation>
     </message>
@@ -430,7 +437,38 @@
         <translation>Zu Favoriten hinzufügen</translation>
     </message>
     <message>
-        <location line="+28" />
+        <location line="+6" />
+        <source>Save to node</source>
+        <translation>Auf Node speichern</translation>
+    </message>
+    <message>
+        <location line="+6" />
+        <location line="+43" />
+        <source>Delete contact</source>
+        <translation>Kontakt löschen</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>Delete contacts</source>
+        <translation>Kontakte löschen</translation>
+    </message>
+    <message>
+        <location line="+12" />
+        <source>Delete %1?</source>
+        <translation>%1 löschen?</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Delete %1 contacts?</source>
+        <translation>%1 Kontakte löschen?</translation>
+    </message>
+    <message>
+        <location line="+2" />
+        <source>They are removed from your node and from this list. A contact shows up again the next time its advert is heard.</source>
+        <translation>Sie werden von deinem Node und aus dieser Liste entfernt. Ein Kontakt erscheint wieder, sobald sein Advert erneut empfangen wird.</translation>
+    </message>
+    <message>
+        <location line="+40" />
         <source>Connect to your node to load contacts</source>
         <translation>Mit deinem Node verbinden, um Kontakte zu laden</translation>
     </message>
@@ -440,7 +478,12 @@
         <translation>Kontakte werden geladen...</translation>
     </message>
     <message>
-        <location line="+1" />
+        <location line="+2" />
+        <source>%1 contact(s) · %2 of %3 stored on your node</source>
+        <translation>%1 Kontakt(e) · %2 von %3 auf deinem Node gespeichert</translation>
+    </message>
+    <message>
+        <location line="+4" />
         <source>%1 contact(s) from received adverts</source>
         <translation>%1 Kontakt(e) aus empfangenen Adverts</translation>
     </message>
@@ -455,7 +498,62 @@
         <translation>Advert</translation>
     </message>
     <message>
+        <location line="+5" />
+        <source>Done</source>
+        <translation>Fertig</translation>
+    </message>
+    <message>
+        <location line="+0" />
+        <source>Select</source>
+        <translation>Auswählen</translation>
+    </message>
+    <message>
         <location line="+24" />
+        <source>Tap contacts to select them</source>
+        <translation>Kontakte zum Auswählen antippen</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>%1 selected</source>
+        <translation>%1 ausgewählt</translation>
+    </message>
+    <message>
+        <location line="+4" />
+        <source>Select ▾</source>
+        <translation>Auswahl ▾</translation>
+    </message>
+    <message>
+        <location line="+9" />
+        <source>All except favourites</source>
+        <translation>Alle außer Favoriten</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Inactive for 7 days</source>
+        <translation>7 Tage inaktiv</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Inactive for 30 days</source>
+        <translation>30 Tage inaktiv</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>All (including favourites)</source>
+        <translation>Alle (inkl. Favoriten)</translation>
+    </message>
+    <message>
+        <location line="+5" />
+        <source>Clear selection</source>
+        <translation>Auswahl aufheben</translation>
+    </message>
+    <message>
+        <location line="+6" />
+        <source>Delete</source>
+        <translation>Löschen</translation>
+    </message>
+    <message>
+        <location line="+48" />
         <source> - nodes and repeaters in range will list you after receiving it.</source>
         <translation> - Nodes und Repeater in Reichweite listen dich, sobald sie es empfangen.</translation>
     </message>
@@ -505,7 +603,12 @@
         <translation>Noch keine Kontakte. Repeater und Nodes erscheinen hier, sobald dein Node ihre Adverts empfängt. Tippe auf „Advert“, um dich bekannt zu machen.</translation>
     </message>
     <message>
-        <location line="+63" />
+        <location line="+70" />
+        <source>not on node</source>
+        <translation>nicht auf dem Node</translation>
+    </message>
+    <message>
+        <location line="+16" />
         <source>Manage ›</source>
         <translation>Verwalten ›</translation>
     </message>
@@ -591,7 +694,12 @@
         <translation>Noch keine Nachrichten mit %1.</translation>
     </message>
     <message>
-        <location line="+64" />
+        <location line="+58" />
+        <source>%1 is not stored on your node yet. Sending a message saves it there first.</source>
+        <translation>%1 ist noch nicht auf deinem Node gespeichert. Beim Senden wird der Kontakt zuerst dort gespeichert.</translation>
+    </message>
+    <message>
+        <location line="+22" />
         <source>Message to %1...</source>
         <translation>Nachricht an %1...</translation>
     </message>
@@ -845,21 +953,21 @@
     </message>
     <message>
         <location line="+25" />
-        <location line="+708" />
+        <location line="+715" />
         <source>Channels</source>
         <translation>Kanäle</translation>
     </message>
     <message>
-        <location line="-694" />
-        <location line="+547" />
+        <location line="-701" />
+        <location line="+554" />
         <location line="+160" />
         <source>Contacts</source>
         <translation>Kontakte</translation>
     </message>
     <message>
-        <location line="-692" />
+        <location line="-699" />
         <location line="+258" />
-        <location line="+288" />
+        <location line="+295" />
         <location line="+38" />
         <location line="+35" />
         <location line="+41" />
@@ -867,7 +975,7 @@
         <translation>Zurück</translation>
     </message>
     <message>
-        <location line="-648" />
+        <location line="-655" />
         <source>MeshCore Channels</source>
         <translation>MeshCore-Kanäle</translation>
     </message>
@@ -933,7 +1041,7 @@
         <translation>Kanal entfernen</translation>
     </message>
     <message>
-        <location line="+4" />
+        <location line="+10" />
         <source>Remove %1 from your node?
 
 Its message history in the app is deleted too. You can add the channel again later by typing its name.</source>
@@ -942,7 +1050,7 @@ Its message history in the app is deleted too. You can add the channel again lat
 Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal später wieder hinzufügen, indem du seinen Namen eingibst.</translation>
     </message>
     <message>
-        <location line="+17" />
+        <location line="+18" />
         <source>Messages - %1</source>
         <translation>Nachrichten - %1</translation>
     </message>

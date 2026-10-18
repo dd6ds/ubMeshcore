@@ -159,6 +159,22 @@ Item {
             }
         }
 
+        // Contact heard via advert but not in the node's table: sending saves
+        // it there first (fails with a clear message if the table is full).
+        AppLabel {
+            Layout.fillWidth: true
+            readonly property bool notOnNode: {
+                BluetoothManager.contactsModel.nodeCount   // re-evaluate on changes
+                return !BluetoothManager.contactsModel.isOnNode(chat.keyHex)
+            }
+            visible: notOnNode
+            text: qsTr("%1 is not stored on your node yet. Sending a message saves it there first.")
+                  .arg(chat.contactName)
+            color: "#e65100"
+            wrapMode: Text.Wrap
+            font.pixelSize: chat.fontSecondary
+        }
+
         AppLabel {
             id: errorLabel
             Layout.fillWidth: true

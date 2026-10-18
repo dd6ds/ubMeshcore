@@ -14,6 +14,11 @@ struct MeshContact {
     quint8 type = 0;           // ADV_TYPE_*: 1 chat, 2 repeater, 3 room, 4 sensor
     quint8 flags = 0;
     qint8 outPathLen = -1;     // -1 = no known path (flood), else hop count
+    QByteArray outPath;        // 64 bytes as stored by the node (for ADD_UPDATE)
+    /// Stored in the node's own contact table. False for contacts only known
+    /// from PUSH_NEW_ADVERT (node did not add them, e.g. its table is full) -
+    /// the node refuses to send direct messages to those ("not found").
+    bool onNode = true;
     QString name;
     quint32 lastAdvert = 0;    // advertiser's own clock
     double lat = 0.0;
@@ -30,6 +35,9 @@ class ContactListModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    /// Contacts actually stored in the node's table (count includes the ones
+    /// only known from PUSH_NEW_ADVERT).
+    Q_PROPERTY(int nodeCount READ nodeCount NOTIFY countChanged)
     /// Seconds after which a node counts as no longer active.
     Q_PROPERTY(int activeWindowSecs READ activeWindowSecs WRITE setActiveWindowSecs
                NOTIFY activeWindowChanged)
@@ -47,7 +55,8 @@ public:
         LatRole,
         LonRole,
         HasLocationRole,
-        FavoriteRole
+        FavoriteRole,
+        OnNodeRole         // stored in the node's contact table
     };
 
     explicit ContactListModel(QObject *parent = nullptr);
@@ -57,6 +66,11 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     int count() const { return m_contacts.size(); }
+    int nodeCount() const;
+    /// Marks a contact as stored / not stored on the node.
+    void setOnNode(const QByteArray &publicKey, bool onNode);
+    /// Drops a contact from the list (after removing it from the node).
+    void removeContact(const QByteArray &publicKey);
     int activeWindowSecs() const { return m_activeWindowSecs; }
     void setActiveWindowSecs(int secs);
 
@@ -74,6 +88,14 @@ public:
 
     Q_INVOKABLE QString nameForKey(const QString &keyHex) const;
     Q_INVOKABLE QString typeForKey(const QString &keyHex) const;
+    /// True if the contact is stored in the node's table (unknown keys: true,
+    /// so no warning is shown for contacts that are not in the list at all).
+    Q_INVOKABLE bool isOnNode(const QString &keyHex) const;
+    /// Keys of contacts not heard for more than `days` (never heard counts
+    /// as inactive); favourites are skipped if skipFavorites.
+    Q_INVOKABLE QStringList inactiveKeys(int days, bool skipFavorites) const;
+    /// Keys of all contacts, optionally without favourites.
+    Q_INVOKABLE QStringList allKeys(bool skipFavorites) const;
 
     /// Favourites are kept on the phone (QSettings, keyed by public key), so
     /// they survive reconnects, app restarts and a contact re-sync.
