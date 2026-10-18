@@ -104,7 +104,7 @@ container; nothing needs to be installed on the host.
 |---|---|---|
 | Heltec V3 | Companion | OK |
 | Heltec V4 | Companion | OK |
-| SenseCAP Solar P1 Pro | Repeater | OK |
+| SenseCAP Solar P1 Pro | Repeater | OK — management only restricted (TODO) |
 
 ## Build and install
 
