@@ -78,17 +78,17 @@ QString ContactListModel::typeName(quint8 type)
 static QString ageText(quint32 epoch)
 {
     if (epoch == 0)
-        return QStringLiteral("never");
+        return ContactListModel::tr("never");
     const qint64 delta = QDateTime::currentSecsSinceEpoch() - qint64(epoch);
     if (delta < 0)
-        return QStringLiteral("just now");   // node clock slightly ahead
+        return ContactListModel::tr("just now");   // node clock slightly ahead
     if (delta < 60)
-        return QStringLiteral("%1 s ago").arg(delta);
+        return ContactListModel::tr("%1 s ago").arg(delta);
     if (delta < 3600)
-        return QStringLiteral("%1 min ago").arg(delta / 60);
+        return ContactListModel::tr("%1 min ago").arg(delta / 60);
     if (delta < 86400)
-        return QStringLiteral("%1 h ago").arg(delta / 3600);
-    return QStringLiteral("%1 d ago").arg(delta / 86400);
+        return ContactListModel::tr("%1 h ago").arg(delta / 3600);
+    return ContactListModel::tr("%1 d ago").arg(delta / 86400);
 }
 
 bool ContactListModel::isActive(const MeshContact &c) const

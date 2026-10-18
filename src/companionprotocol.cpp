@@ -601,17 +601,17 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         const int err = payload.isEmpty() ? 0 : int(quint8(payload.at(0)));
         QString why;
         switch (err) {
-        case 1: why = QStringLiteral("unsupported command"); break;
-        case 2: why = QStringLiteral("not found"); break;
-        case 3: why = QStringLiteral("table full"); break;
-        case 4: why = QStringLiteral("bad state"); break;
-        case 5: why = QStringLiteral("storage error"); break;
-        case 6: why = QStringLiteral("illegal argument"); break;
+        case 1: why = tr("unsupported command"); break;
+        case 2: why = tr("not found"); break;
+        case 3: why = tr("table full"); break;
+        case 4: why = tr("bad state"); break;
+        case 5: why = tr("storage error"); break;
+        case 6: why = tr("illegal argument"); break;
         default: break;
         }
         emit errorReported(why.isEmpty()
-                               ? QStringLiteral("Node rejected the last command")
-                               : QStringLiteral("Node rejected the last command (%1)").arg(why));
+                               ? tr("Node rejected the last command")
+                               : tr("Node rejected the last command (%1)").arg(why));
         break;
     }
 

@@ -8,6 +8,9 @@
 #include <QStandardPaths>
 #include <QDateTime>
 #include <QDir>
+#include <QLibraryInfo>
+#include <QLocale>
+#include <QTranslator>
 
 #include "bluetoothmanager.h"
 #include "messagestore.h"
@@ -50,6 +53,27 @@ int main(int argc, char *argv[]) {
     app.setApplicationName("ubMeshcore");
     app.setOrganizationName("ubmeshcore");
     logMessage("=== ubMeshcore starting ===");
+
+    // --- language -----------------------------------------------------------
+    // Follows the language selected on the phone (Lomiri exports it as
+    // LANG/LANGUAGE, which QLocale::system() reads). App texts are embedded
+    // as :/i18n/ubmeshcore_<lang>.qm; English is the source language, so a
+    // missing translation simply leaves the English text.
+    const QLocale locale = QLocale::system();
+    QTranslator *appTranslator = new QTranslator(&app);
+    if (appTranslator->load(locale, QStringLiteral("ubmeshcore"), QStringLiteral("_"),
+                            QStringLiteral(":/i18n"))) {
+        app.installTranslator(appTranslator);
+        logMessage(QString("Language: %1 (translation loaded)").arg(locale.name()));
+    } else {
+        logMessage(QString("Language: %1 (no translation, using English)").arg(locale.name()));
+    }
+    // Qt's own texts (e.g. the Yes/Cancel dialog buttons), if the system has
+    // them installed.
+    QTranslator *qtTranslator = new QTranslator(&app);
+    if (qtTranslator->load(locale, QStringLiteral("qtbase"), QStringLiteral("_"),
+                           QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
+        app.installTranslator(qtTranslator);
 
     QQmlApplicationEngine engine;
 

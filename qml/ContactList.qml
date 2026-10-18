@@ -45,17 +45,17 @@ Item {
     }
 
     function typeLabel(type) {
-        if (type === "repeater") return "Repeater"
-        if (type === "room") return "Room"
-        if (type === "chat") return "Companion"
-        if (type === "sensor") return "Sensor"
-        return "Unknown"
+        if (type === "repeater") return qsTr("Repeater")
+        if (type === "room") return qsTr("Room")
+        if (type === "chat") return qsTr("Companion")
+        if (type === "sensor") return qsTr("Sensor")
+        return qsTr("Unknown")
     }
 
     function hopsText(hops) {
-        if (hops < 0) return "flood"
-        if (hops === 0) return "direct"
-        return hops + (hops === 1 ? " hop" : " hops")
+        if (hops < 0) return qsTr("flood")
+        if (hops === 0) return qsTr("direct")
+        return hops === 1 ? qsTr("1 hop") : qsTr("%1 hops").arg(hops)
     }
 
     StackView {
@@ -87,18 +87,18 @@ Item {
                     font.pixelSize: root.fontSecondary
                     wrapMode: Text.Wrap
                     text: !BluetoothManager.sessionReady
-                          ? "Connect to your node to load contacts"
+                          ? qsTr("Connect to your node to load contacts")
                           : BluetoothManager.contactsSyncing
-                            ? "Loading contacts..."
-                            : BluetoothManager.contactsModel.count + " contact(s) from received adverts"
+                            ? qsTr("Loading contacts...")
+                            : qsTr("%1 contact(s) from received adverts").arg(BluetoothManager.contactsModel.count)
                 }
                 Button {
-                    text: "Refresh"
+                    text: qsTr("Refresh")
                     enabled: BluetoothManager.sessionReady && !BluetoothManager.contactsSyncing
                     onClicked: BluetoothManager.refreshContacts()
                 }
                 Button {
-                    text: "Advert"
+                    text: qsTr("Advert")
                     enabled: BluetoothManager.sessionReady
                     onClicked: BluetoothManager.sendAdvert(true)
                 }
@@ -122,14 +122,14 @@ Item {
                     color: BluetoothManager.lastAdvertOk ? "#1b5e20" : "#b71c1c"
                     text: BluetoothManager.lastAdvertInfo
                           + (BluetoothManager.lastAdvertInfo.indexOf("✓") === 0
-                             ? " - nodes and repeaters in range will list you after receiving it."
+                             ? qsTr(" - nodes and repeaters in range will list you after receiving it.")
                              : "")
                 }
             }
 
             AppField {
                 Layout.fillWidth: true
-                placeholderText: "Search name or key..."
+                placeholderText: qsTr("Search name or key...")
                 text: root.searchText
                 onTextChanged: root.searchText = text
             }
@@ -139,8 +139,8 @@ Item {
                 Layout.fillWidth: true
                 spacing: Math.round(root.gu * 0.5)
                 Repeater {
-                    model: [ { k: "all", t: "All" }, { k: "repeater", t: "Repeaters" },
-                             { k: "chat", t: "Companions" }, { k: "room", t: "Rooms" } ]
+                    model: [ { k: "all", t: qsTr("All") }, { k: "repeater", t: qsTr("Repeaters") },
+                             { k: "chat", t: qsTr("Companions") }, { k: "room", t: qsTr("Rooms") } ]
                     delegate: Button {
                         text: modelData.t
                         checkable: true
@@ -161,7 +161,7 @@ Item {
                 }
                 AppLabel {
                     Layout.fillWidth: true
-                    text: "★ Only favourites"
+                    text: qsTr("★ Only favourites")
                     font.pixelSize: root.fontSecondary
                     wrapMode: Text.Wrap
                     MouseArea {
@@ -175,7 +175,7 @@ Item {
                 }
                 AppLabel {
                     Layout.fillWidth: true
-                    text: "Only active (24 h)"
+                    text: qsTr("Only active (24 h)")
                     font.pixelSize: root.fontSecondary
                     wrapMode: Text.Wrap
                     MouseArea {
@@ -204,10 +204,10 @@ Item {
                              || (root.favoritesOnly && contactList.count > 0
                                  && contactList.contentHeight < 1)
                     text: contactList.count > 0
-                          ? "No favourites yet. Tap the ☆ on a contact to mark it."
-                          : "No contacts yet. Repeaters and nodes appear here as soon as "
-                            + "your node receives their adverts. Tap \"Advert\" to announce "
-                            + "yourself."
+                          ? qsTr("No favourites yet. Tap the ☆ on a contact to mark it.")
+                          : qsTr("No contacts yet. Repeaters and nodes appear here as soon as "
+                                 + "your node receives their adverts. Tap \"Advert\" to announce "
+                                 + "yourself.")
                 }
 
                 delegate: Item {
@@ -263,7 +263,7 @@ Item {
 
                             AppLabel {
                                 visible: manageable
-                                text: "Manage ›"
+                                text: qsTr("Manage ›")
                                 color: root.typeColor(type)
                                 font.pixelSize: root.fontSecondary
                             }

@@ -212,7 +212,7 @@ ApplicationWindow {
         // Page 1: Node Discovery
         Page {
             id: nodeDiscoveryPage
-            title: "Discover MeshCore Nodes"
+            title: qsTr("Discover MeshCore Nodes")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -220,7 +220,7 @@ ApplicationWindow {
                 spacing: rootWindow.spacingUnit
 
                 AppLabel {
-                    text: "Scan for Bluetooth devices"
+                    text: qsTr("Scan for Bluetooth devices")
                     font.bold: true
                     font.pixelSize: rootWindow.fontTitle
                     Layout.fillWidth: true
@@ -228,7 +228,7 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: BluetoothManager.scanActive ? "Stop Scan" : "Start Scan"
+                    text: BluetoothManager.scanActive ? qsTr("Stop Scan") : qsTr("Start Scan")
                     enabled: BluetoothManager.adapterReady || BluetoothManager.scanActive
                     font.pixelSize: rootWindow.fontBody
                     Layout.alignment: Qt.AlignHCenter
@@ -253,8 +253,8 @@ ApplicationWindow {
 
                 AppLabel {
                     text: BluetoothManager.connected
-                          ? "Connected to: " + BluetoothManager.connectedDevice
-                          : BluetoothManager.devicesModel.count + " device(s) found"
+                          ? qsTr("Connected to: %1").arg(BluetoothManager.connectedDevice)
+                          : qsTr("%1 device(s) found").arg(BluetoothManager.devicesModel.count)
                     font.pixelSize: rootWindow.fontSecondary
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
@@ -300,7 +300,7 @@ ApplicationWindow {
                             }
                             AppLabel {
                                 text: model.address
-                                      + (model.lowEnergy ? "  ·  BLE" : "  ·  Classic")
+                                      + (model.lowEnergy ? "  ·  BLE" : "  ·  " + qsTr("Classic"))
                                       + (model.rssi !== 0 ? "  ·  " + model.rssi + " dBm" : "")
                                 color: "#555"
                                 font.pixelSize: rootWindow.fontSecondary
@@ -326,7 +326,7 @@ ApplicationWindow {
         // Page 2: Node Connection
         Page {
             id: nodeConnectionPage
-            title: "Connect to Node"
+            title: qsTr("Connect to Node")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -334,9 +334,9 @@ ApplicationWindow {
                 spacing: rootWindow.spacingUnit
                 
                 AppLabel {
-                    text: "Selected Node: "
-                          + (BluetoothManager.hasSelection ? BluetoothManager.selectedName
-                                                           : "None")
+                    text: qsTr("Selected Node: %1")
+                          .arg(BluetoothManager.hasSelection ? BluetoothManager.selectedName
+                                                             : qsTr("None"))
                     font.bold: true
                     font.pixelSize: rootWindow.fontTitle
                     Layout.fillWidth: true
@@ -365,7 +365,7 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: BluetoothManager.connected ? "Disconnect" : "Connect"
+                    text: BluetoothManager.connected ? qsTr("Disconnect") : qsTr("Connect")
                     enabled: BluetoothManager.hasSelection && !BluetoothManager.connecting
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: Math.round(rootWindow.gu * 22)
@@ -382,7 +382,7 @@ ApplicationWindow {
 
                 AppLabel {
                     text: BluetoothManager.sessionReady
-                          ? "Node: " + (BluetoothManager.nodeName || "(unnamed)")
+                          ? qsTr("Node: %1").arg(BluetoothManager.nodeName || qsTr("(unnamed)"))
                           : ""
                     visible: BluetoothManager.sessionReady
                     font.pixelSize: rootWindow.fontBody
@@ -407,7 +407,7 @@ ApplicationWindow {
                 Item { Layout.fillHeight: true }
 
                 Button {
-                    text: "Channels"
+                    text: qsTr("Channels")
                     enabled: BluetoothManager.uartReady
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 2
@@ -421,14 +421,14 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: "Contacts"
+                    text: qsTr("Contacts")
                     enabled: BluetoothManager.uartReady
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 4
                 }
 
                 Button {
-                    text: "Back"
+                    text: qsTr("Back")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 0
                 }
@@ -440,7 +440,7 @@ ApplicationWindow {
         // Page 3: Channel Selection
         Page {
             id: channelPage
-            title: "MeshCore Channels"
+            title: qsTr("MeshCore Channels")
             
             // A Flickable instead of a stretched ColumnLayout: a ListView has a
             // viewport that has to be sized correctly, and whatever did not fit
@@ -462,9 +462,9 @@ ApplicationWindow {
                     spacing: rootWindow.spacingUnit
 
                     AppLabel {
-                        text: "Connected to: "
-                              + (BluetoothManager.uartReady ? BluetoothManager.selectedName
-                                                            : "not connected")
+                        text: qsTr("Connected to: %1")
+                              .arg(BluetoothManager.uartReady ? BluetoothManager.selectedName
+                                                              : qsTr("not connected"))
                         font.bold: true
                         font.pixelSize: rootWindow.fontBody
                         Layout.fillWidth: true
@@ -473,7 +473,7 @@ ApplicationWindow {
 
                     AppField {
                         id: channelInput
-                        placeholderText: "Channel name, e.g. #p53"
+                        placeholderText: qsTr("Channel name, e.g. #p53")
                         font.pixelSize: rootWindow.fontBody
                         Layout.fillWidth: true
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
@@ -494,12 +494,12 @@ ApplicationWindow {
                         readonly property bool typing: channelInput.text.trim().length > 0
                         text: !typing
                               ? (rootWindow.currentChannelIdx >= 0
-                                 ? "Open " + rootWindow.currentChannelName : "Pick a channel")
+                                 ? qsTr("Open %1").arg(rootWindow.currentChannelName) : qsTr("Pick a channel"))
                               : channelColumn.typedName.length === 0
-                                ? "Invalid channel name"
+                                ? qsTr("Invalid channel name")
                                 : channelColumn.typedIdx >= 0
-                                  ? "Open " + channelColumn.typedName
-                                  : "Add " + channelColumn.typedName
+                                  ? qsTr("Open %1").arg(channelColumn.typedName)
+                                  : qsTr("Add %1").arg(channelColumn.typedName)
                         enabled: !typing ? rootWindow.currentChannelIdx >= 0
                                          : channelColumn.typedName.length > 0
                         Layout.alignment: Qt.AlignHCenter
@@ -574,14 +574,15 @@ ApplicationWindow {
                         text: {
                             var names = BluetoothManager.channelNames
                             if (names.length === 0)
-                                return "Waiting for the channel list from the node..."
+                                return qsTr("Waiting for the channel list from the node...")
                             var used = 0
                             for (var i = 0; i < names.length; ++i)
                                 if (names[i].length > 0) ++used
-                            return "Channels on " + BluetoothManager.nodeName
-                                    + (BluetoothManager.maxChannels > 0
-                                       ? " (" + used + " of " + BluetoothManager.maxChannels + " slots used):"
-                                       : ":")
+                            return BluetoothManager.maxChannels > 0
+                                    ? qsTr("Channels on %1 (%2 of %3 slots used):")
+                                      .arg(BluetoothManager.nodeName).arg(used)
+                                      .arg(BluetoothManager.maxChannels)
+                                    : qsTr("Channels on %1:").arg(BluetoothManager.nodeName)
                         }
                         color: "#666"
                         font.pixelSize: rootWindow.fontSecondary
@@ -625,8 +626,8 @@ ApplicationWindow {
                                 AppLabel {
                                     visible: rootWindow.unreadFor(index) > 0
                                     text: rootWindow.unreadFor(index) === 1
-                                          ? "1 new message"
-                                          : rootWindow.unreadFor(index) + " new messages"
+                                          ? qsTr("1 new message")
+                                          : qsTr("%1 new messages").arg(rootWindow.unreadFor(index))
                                     color: "#d32f2f"
                                     font.pixelSize: rootWindow.fontSecondary
                                 }
@@ -685,7 +686,7 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "Back"
+                        text: qsTr("Back")
                         Layout.alignment: Qt.AlignHCenter
                         Layout.preferredHeight: Math.round(rootWindow.gu * 5)
                         onClicked: mainStack.currentIndex = 1
@@ -705,13 +706,14 @@ ApplicationWindow {
                                 Math.round(rootWindow.gu * 40))
                 x: (parent.width - width) / 2
                 y: (parent.height - height) / 3
-                title: "Remove channel"
+                title: qsTr("Remove channel")
                 standardButtons: Dialog.Yes | Dialog.Cancel
                 contentItem: AppLabel {
                     wrapMode: Text.Wrap
-                    text: "Remove " + removeDialog.channelName + " from your node?\n\n"
-                          + "Its message history in the app is deleted too. You can add "
-                          + "the channel again later by typing its name."
+                    text: qsTr("Remove %1 from your node?\n\n"
+                               + "Its message history in the app is deleted too. You can add "
+                               + "the channel again later by typing its name.")
+                          .arg(removeDialog.channelName)
                 }
                 onAccepted: {
                     if (BluetoothManager.removeChannel(channelIdx))
@@ -725,8 +727,8 @@ ApplicationWindow {
         // Page 4: Messages
         Page {
             id: messagesPage
-            title: "Messages - " + (rootWindow.currentChannelName
-                                    ? rootWindow.currentChannelName : "No Channel")
+            title: qsTr("Messages - %1").arg(rootWindow.currentChannelName
+                                    ? rootWindow.currentChannelName : qsTr("No Channel"))
             
             ColumnLayout {
                 anchors.fill: parent
@@ -740,7 +742,7 @@ ApplicationWindow {
                     spacing: rootWindow.spacingUnit
 
                     Button {
-                        text: "‹ Channels"
+                        text: qsTr("‹ Channels")
                         Layout.preferredHeight: Math.round(rootWindow.gu * 5)
                         onClicked: {
                             messageInput.focus = false
@@ -762,13 +764,13 @@ ApplicationWindow {
                         spacing: 0
                         AppLabel {
                             Layout.fillWidth: true
-                            text: rootWindow.currentChannelName || "No channel"
+                            text: rootWindow.currentChannelName || qsTr("No channel")
                             font.bold: true
                             elide: Text.ElideRight
                         }
                         AppLabel {
                             Layout.fillWidth: true
-                            text: BluetoothManager.sessionReady ? "session ready" : "no node session"
+                            text: BluetoothManager.sessionReady ? qsTr("session ready") : qsTr("no node session")
                             color: BluetoothManager.sessionReady ? "#2e7d32" : "#b00"
                             font.pixelSize: rootWindow.fontSecondary
                         }
@@ -789,13 +791,13 @@ ApplicationWindow {
                     
                     AppField {
                         id: messageInput
-                        placeholderText: "Enter message..."
+                        placeholderText: qsTr("Enter message...")
                         font.pixelSize: rootWindow.fontBody
                         Layout.fillWidth: true
                     }
                     
                     Button {
-                        text: "Send"
+                        text: qsTr("Send")
                         // Deliberately always enabled. A disabled button gives
                         // no feedback at all - it just looks broken - so the
                         // checks happen here and say what is missing.
@@ -807,15 +809,15 @@ ApplicationWindow {
                                         "session", BluetoothManager.sessionReady,
                                         "len", txt.length)
                             if (txt.length === 0) {
-                                rootWindow.addLocalMessage("!", "Nothing typed yet")
+                                rootWindow.addLocalMessage("!", qsTr("Nothing typed yet"))
                                 return
                             }
                             if (!BluetoothManager.sessionReady) {
-                                rootWindow.addLocalMessage("!", "No node session - connect first")
+                                rootWindow.addLocalMessage("!", qsTr("No node session - connect first"))
                                 return
                             }
                             if (rootWindow.currentChannelIdx < 0) {
-                                rootWindow.addLocalMessage("!", "No channel selected")
+                                rootWindow.addLocalMessage("!", qsTr("No channel selected"))
                                 return
                             }
                             if (BluetoothManager.sendChannelMessage(
@@ -827,7 +829,7 @@ ApplicationWindow {
                     }
                     
                     Button {
-                        text: "Refresh"
+                        text: qsTr("Refresh")
                         Layout.preferredHeight: Math.round(rootWindow.gu * 5)
                         onClicked: {
                             console.log("Refreshing messages...")
@@ -848,7 +850,7 @@ ApplicationWindow {
                     AppLabel {
                         anchors.centerIn: parent
                         visible: messageView.contentHeight < 1
-                        text: "No messages in this channel yet"
+                        text: qsTr("No messages in this channel yet")
                         color: "#888"
                         font.pixelSize: rootWindow.fontSecondary
                     }
@@ -936,11 +938,11 @@ ApplicationWindow {
                         property string sender: ""
                         property string route: ""
                         MenuItem {
-                            text: "Reply to " + messageMenu.sender
+                            text: qsTr("Reply to %1").arg(messageMenu.sender)
                             onTriggered: rootWindow.startReply(messageMenu.sender, "")
                         }
                         MenuItem {
-                            text: "Reply with route"
+                            text: qsTr("Reply with route")
                             enabled: messageMenu.route.length > 0
                             onTriggered: rootWindow.startReply(
                                              messageMenu.sender,
@@ -955,7 +957,7 @@ ApplicationWindow {
         // Page 4: Contacts
         Page {
             id: contactsPage
-            title: "Contacts"
+            title: qsTr("Contacts")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -968,7 +970,7 @@ ApplicationWindow {
                 }
                 
                 Button {
-                    text: "Back"
+                    text: qsTr("Back")
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: Math.round(rootWindow.gu * 22)
                     Layout.preferredHeight: Math.round(rootWindow.gu * 5)
@@ -980,7 +982,7 @@ ApplicationWindow {
         // Page 5: Settings
         Page {
             id: settingsPage
-            title: "Settings"
+            title: qsTr("Settings")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -988,25 +990,25 @@ ApplicationWindow {
                 spacing: rootWindow.spacingUnit
                 
                 AppLabel {
-                    text: "App Settings"
+                    text: qsTr("App Settings")
                     font.bold: true
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 Button {
-                    text: "Node Administration"
+                    text: qsTr("Node Administration")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 6
                 }
                 
                 Button {
-                    text: "About"
+                    text: qsTr("About")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 7
                 }
                 
                 Button {
-                    text: "Back"
+                    text: qsTr("Back")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 0
                 }
@@ -1016,7 +1018,7 @@ ApplicationWindow {
         // Page 6: Node Admin
         Page {
             id: adminPage
-            title: "Node Administration"
+            title: qsTr("Node Administration")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -1024,24 +1026,24 @@ ApplicationWindow {
                 spacing: rootWindow.spacingUnit
                 
                 AppLabel {
-                    text: "Administer connected node"
+                    text: qsTr("Administer connected node")
                     font.bold: true
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 AppField {
-                    placeholderText: "Admin Password"
+                    placeholderText: qsTr("Admin Password")
                     echoMode: TextInput.Password
                     Layout.fillWidth: true
                 }
                 
                 Button {
-                    text: "Send Command"
+                    text: qsTr("Send Command")
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 Button {
-                    text: "Back"
+                    text: qsTr("Back")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 5
                 }
@@ -1051,7 +1053,7 @@ ApplicationWindow {
         // Page 7: About
         Page {
             id: aboutPage
-            title: "About ubMeshcore"
+            title: qsTr("About ubMeshcore")
             
             ColumnLayout {
                 anchors.fill: parent
@@ -1066,23 +1068,23 @@ ApplicationWindow {
                 }
                 
                 AppLabel {
-                    text: "Version " + Qt.application.version
+                    text: qsTr("Version %1").arg(Qt.application.version)
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 AppLabel {
-                    text: "Bluetooth companion app for MeshCore nodes on Ubuntu Touch"
+                    text: qsTr("Bluetooth companion app for MeshCore nodes on Ubuntu Touch")
                     Layout.alignment: Qt.AlignHCenter
                     wrapMode: Text.Wrap
                 }
                 
                 AppLabel {
-                    text: "Based on meshcore-info-display project"
+                    text: qsTr("Based on meshcore-info-display project")
                     Layout.alignment: Qt.AlignHCenter
                 }
                 
                 Button {
-                    text: "Back"
+                    text: qsTr("Back")
                     Layout.alignment: Qt.AlignHCenter
                     onClicked: mainStack.currentIndex = 5
                 }
@@ -1097,11 +1099,11 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         
         ToolButton {
-            text: "Nodes"
+            text: qsTr("Nodes")
             onClicked: mainStack.currentIndex = 0
         }
         ToolButton {
-            text: "Channels"
+            text: qsTr("Channels")
             onClicked: mainStack.currentIndex = 2
             UnreadBadge {
                 count: rootWindow.unreadTotal
@@ -1110,15 +1112,15 @@ ApplicationWindow {
             }
         }
         ToolButton {
-            text: "Messages"
+            text: qsTr("Messages")
             onClicked: mainStack.currentIndex = 3
         }
         ToolButton {
-            text: "Contacts"
+            text: qsTr("Contacts")
             onClicked: mainStack.currentIndex = 4
         }
         ToolButton {
-            text: "Settings"
+            text: qsTr("Settings")
             onClicked: mainStack.currentIndex = 5
         }
     }

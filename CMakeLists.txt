@@ -13,6 +13,24 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 # QBluetoothDeviceDiscoveryAgent drops names that BlueZ resolves late.
 find_package(Qt5 COMPONENTS Core Gui Qml Quick Bluetooth DBus REQUIRED)
 
+# ---------------------------------------------------------------------------
+# Translations: i18n/ubmeshcore_<lang>.ts -> .qm, embedded as :/i18n/*.qm.
+# main.cpp loads the one matching the phone's system language.
+# ---------------------------------------------------------------------------
+find_package(Qt5LinguistTools REQUIRED)
+file(GLOB UBMESHCORE_TS_FILES ${CMAKE_CURRENT_SOURCE_DIR}/i18n/ubmeshcore_*.ts)
+qt5_add_translation(UBMESHCORE_QM_FILES ${UBMESHCORE_TS_FILES})
+set(UBMESHCORE_I18N_QRC ${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc)
+set(_i18n_entries "")
+foreach(_qm ${UBMESHCORE_QM_FILES})
+    get_filename_component(_qm_name ${_qm} NAME)
+    string(APPEND _i18n_entries "    <file alias=\"i18n/${_qm_name}\">${_qm}</file>\n")
+endforeach()
+file(WRITE ${UBMESHCORE_I18N_QRC}
+     "<RCC>\n  <qresource prefix=\"/\">\n${_i18n_entries}  </qresource>\n</RCC>\n")
+# The .qrc references generated .qm files, so they must exist before rcc runs.
+add_custom_target(ubmeshcore_translations DEPENDS ${UBMESHCORE_QM_FILES})
+
 add_executable(ubmeshcore
     src/main.cpp
     src/bluetoothmanager.cpp
@@ -23,7 +41,9 @@ add_executable(ubmeshcore
     src/contactmodel.h
     src/messagestore.cpp
     src/messagestore.h
-    qml.qrc)
+    qml.qrc
+    ${UBMESHCORE_I18N_QRC})
+add_dependencies(ubmeshcore ubmeshcore_translations)
 
 target_include_directories(ubmeshcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 

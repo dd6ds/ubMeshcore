@@ -41,7 +41,7 @@ Item {
             return
         if (BluetoothManager.sendNodeCommand(keyHex, cmd)) {
             log("> " + cmd.trim())
-            busy = "Waiting for reply to \"" + cmd.trim() + "\"..."
+            busy = qsTr("Waiting for reply to \"%1\"...").arg(cmd.trim())
             waitTimer.restart()
         }
     }
@@ -52,7 +52,7 @@ Item {
         interval: 30000
         onTriggered: {
             if (admin.busy.length) {
-                admin.log("! no reply (timeout) - " + admin.busy)
+                admin.log(qsTr("! no reply (timeout) - %1").arg(admin.busy))
                 admin.busy = ""
             }
         }
@@ -66,15 +66,16 @@ Item {
             admin.busy = ""
             admin.loggedIn = success
             admin.isAdmin = success && isAdmin
-            admin.log(success ? (isAdmin ? "Logged in as admin" : "Logged in as guest (read-only)")
-                              : "Login failed - wrong password or no reply")
+            admin.log(success ? (isAdmin ? qsTr("Logged in as admin")
+                                      : qsTr("Logged in as guest (read-only)"))
+                              : qsTr("Login failed - wrong password or no reply"))
         }
         onNodeStatusReceived: {
             if (!admin.isMe(keyHex)) return
             waitTimer.stop()
             admin.busy = ""
             admin.statusRows = status
-            admin.log("Status received")
+            admin.log(qsTr("Status received"))
         }
         onNodeCliReply: {
             if (!admin.isMe(keyHex)) return
@@ -107,7 +108,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Button {
-                    text: "‹ Contacts"
+                    text: qsTr("‹ Contacts")
                     onClicked: admin.backRequested()
                 }
                 ColumnLayout {
@@ -164,8 +165,8 @@ Item {
                     font.pixelSize: admin.fontSecondary
                     color: "#e65100"
                     text: BluetoothManager.connected
-                          ? "Connected, node session still starting... (" + BluetoothManager.connectionState + ")"
-                          : "Not connected to your node. Go to the device page and connect again, then come back."
+                          ? qsTr("Connected, node session still starting... (%1)").arg(BluetoothManager.connectionState)
+                          : qsTr("Not connected to your node. Go to the device page and connect again, then come back.")
                 }
             }
 
@@ -180,7 +181,7 @@ Item {
 
             // --- login ----------------------------------------------------
             AppLabel {
-                text: "Login"
+                text: qsTr("Login")
                 font.bold: true
                 font.pixelSize: admin.fontBody
             }
@@ -189,21 +190,21 @@ Item {
                 AppField {
                     id: passwordField
                     Layout.fillWidth: true
-                    placeholderText: "Admin password"
+                    placeholderText: qsTr("Admin password")
                     echoMode: TextInput.Password
                     maximumLength: 15
                     onAccepted: loginButton.clicked()
                 }
                 Button {
                     id: loginButton
-                    text: admin.loggedIn ? "Re-login" : "Login"
+                    text: admin.loggedIn ? qsTr("Re-login") : qsTr("Login")
                     // Only blocked while a request is pending. Without a node
                     // session the backend reports why in the console below.
                     enabled: admin.busy.length === 0
                     onClicked: {
                         if (BluetoothManager.loginToNode(admin.keyHex, passwordField.text)) {
-                            admin.busy = "Logging in..."
-                            admin.log("Login request sent")
+                            admin.busy = qsTr("Logging in...")
+                            admin.log(qsTr("Login request sent"))
                             waitTimer.restart()
                         }
                     }
@@ -214,9 +215,9 @@ Item {
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap
                 color: admin.isAdmin ? "#2e7d32" : (admin.loggedIn ? "#f57c00" : "#666")
-                text: admin.isAdmin ? "Admin session active - CLI commands enabled"
-                    : admin.loggedIn ? "Guest login - status only, CLI needs the admin password"
-                    : "Not logged in. Leave empty for guest access if the node allows it."
+                text: admin.isAdmin ? qsTr("Admin session active - CLI commands enabled")
+                    : admin.loggedIn ? qsTr("Guest login - status only, CLI needs the admin password")
+                    : qsTr("Not logged in. Leave empty for guest access if the node allows it.")
             }
 
             // --- status ---------------------------------------------------
@@ -224,18 +225,18 @@ Item {
                 Layout.fillWidth: true
                 AppLabel {
                     Layout.fillWidth: true
-                    text: "Status"
+                    text: qsTr("Status")
                     font.bold: true
                     font.pixelSize: admin.fontBody
                 }
                 Button {
-                    text: "Request status"
+                    text: qsTr("Request status")
                     // Only blocked while a request is pending. Without a node
                     // session the backend reports why in the console below.
                     enabled: admin.busy.length === 0
                     onClicked: {
                         if (BluetoothManager.requestNodeStatus(admin.keyHex)) {
-                            admin.busy = "Requesting status..."
+                            admin.busy = qsTr("Requesting status...")
                             waitTimer.restart()
                         }
                     }
@@ -244,7 +245,7 @@ Item {
             AppLabel {
                 Layout.fillWidth: true
                 visible: admin.statusRows.length === 0
-                text: "No status yet. Most repeaters answer status requests only after a login."
+                text: qsTr("No status yet. Most repeaters answer status requests only after a login.")
                 color: "#888"
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap
@@ -270,7 +271,7 @@ Item {
 
             // --- remote CLI -----------------------------------------------
             AppLabel {
-                text: "Commands"
+                text: qsTr("Commands")
                 font.bold: true
                 font.pixelSize: admin.fontBody
             }
@@ -280,14 +281,14 @@ Item {
                 enabled: admin.isAdmin && admin.busy.length === 0
                 Repeater {
                     model: [
-                        { t: "Version",    c: "ver" },
-                        { t: "Clock",      c: "clock" },
-                        { t: "Sync clock", c: "clock sync" },
-                        { t: "Neighbours", c: "neighbors" },
-                        { t: "Name",       c: "get name" },
-                        { t: "Radio",      c: "get radio" },
-                        { t: "TX power",   c: "get tx" },
-                        { t: "Send advert", c: "advert" }
+                        { t: qsTr("Version"),    c: "ver" },
+                        { t: qsTr("Clock"),      c: "clock" },
+                        { t: qsTr("Sync clock"), c: "clock sync" },
+                        { t: qsTr("Neighbours"), c: "neighbors" },
+                        { t: qsTr("Name"),       c: "get name" },
+                        { t: qsTr("Radio"),      c: "get radio" },
+                        { t: qsTr("TX power"),   c: "get tx" },
+                        { t: qsTr("Send advert"), c: "advert" }
                     ]
                     delegate: Button {
                         text: modelData.t
@@ -302,14 +303,14 @@ Item {
                 AppField {
                     id: cliField
                     Layout.fillWidth: true
-                    placeholderText: admin.isAdmin ? "CLI command, e.g. set name MyRepeater"
-                                                   : "Log in as admin to send commands"
+                    placeholderText: admin.isAdmin ? qsTr("CLI command, e.g. set name MyRepeater")
+                                                   : qsTr("Log in as admin to send commands")
                     inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                     onAccepted: sendButton.clicked()
                 }
                 Button {
                     id: sendButton
-                    text: "Send"
+                    text: qsTr("Send")
                     enabled: admin.busy.length === 0 && cliField.text.trim().length > 0
                     onClicked: {
                         admin.sendCli(cliField.text)

@@ -53,6 +53,9 @@ the mesh.
   airtime) and remote CLI commands with quick buttons (`ver`, `clock`,
   `clock sync`, `neighbors`, `get name`, `get radio`, `get tx`, `advert`).
 - **Advert** — send your own flood advert from the contacts page.
+- **Multilanguage** — the app follows the language selected on the phone.
+  Included: English (default) and German. Missing translations fall back to
+  English.
 - **Auto-reconnect** — Lomiri suspends background apps, which drops the BLE
   link; the app reconnects to the last node when it is in the foreground again.
 
@@ -70,6 +73,7 @@ the mesh.
 | Contacts from adverts, favourites | working |
 | Message path (hops, route, repeater names) | working (verified on live messages) |
 | Unread indicators per channel | working |
+| Multilanguage (English, German) | working (German loaded on a de_DE phone) |
 | Reply / reply with route (long press) | implemented, not yet tested on the phone |
 | Add / remove hashtag channels | implemented, not yet tested on the node; private (random-key) channels not supported yet |
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
@@ -142,6 +146,43 @@ from the original scaffold and are not loaded. `MessageView.qml` does not even
 parse on Qt 5.12 — it uses `component`, a Qt 5.15 feature. The `config/`,
 `database/`, `managers/`, `maps/`, `models/`, `network/`, `qr/` and `utils/`
 directories are likewise not part of the build.
+
+## Translations
+
+All user-visible texts are marked with `qsTr()` (QML) or `tr()` (C++).
+Translations live in `i18n/ubmeshcore_<lang>.ts`; CMake compiles them with
+`lrelease` and embeds them as `:/i18n/ubmeshcore_<lang>.qm`. At startup
+`main.cpp` loads the file matching `QLocale::system()` — the language set on
+the phone — and the log shows e.g. `Language: de_DE (translation loaded)`.
+English is the source language, so untranslated texts stay English.
+
+After changing or adding texts, refresh the `.ts` files with `lupdate` from
+the Clickable container (the host's `lupdate` is usually just a wrapper):
+
+```bash
+docker run --rm -u $(id -u):$(id -g) -v "$PWD":/p -w /p \
+  clickable/amd64-20.04-arm64:latest /usr/lib/qt5/bin/lupdate -no-obsolete \
+  -locations relative src/*.cpp qml/main.qml qml/ContactList.qml \
+  qml/RepeaterAdmin.qml -ts i18n/ubmeshcore_de.ts
+python3 i18n/translate_de.py   # fills German; lists any text still missing
+```
+
+To add a language, run the same `lupdate` with a new
+`-ts i18n/ubmeshcore_<lang>.ts` and translate it (Qt Linguist, or a script
+like `translate_de.py`). CMake picks up every `i18n/ubmeshcore_*.ts`
+automatically.
+
+Text built from parts uses placeholders (`qsTr("Open %1").arg(name)`) so word
+order can change per language.
+
+Only the **UI** is translated, never message content. Untranslated on purpose:
+the messages themselves and their sender names (including `You` on your own
+messages), and the **message route** (`4 hops · cc4b › 2a67`, the hop-by-hop
+path) — it is stored in the history and sent to the mesh by *Reply with
+route*, so it must read the same for everyone (`BluetoothManager::routeInfo`
+uses no `tr()` for that reason). Also kept as is: the leading `✓` of the
+advert result, which the contacts page tests for, and commands sent to
+repeaters (`ver`, `clock`, …).
 
 ## Data on the phone
 
