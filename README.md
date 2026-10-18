@@ -152,9 +152,10 @@ later builds start in seconds.
 
 | Hardware | Role | Works |
 |---|---|---|
-| Heltec V3 | Companion | OK |
-| Heltec V4 | Companion | OK |
-| SenseCAP Solar P1 Pro | Repeater | OK — management only restricted (TODO) |
+| Heltec V3 | Companion | yes |
+| Heltec V4 | Companion | yes |
+| SenseCAP Solar P1 Pro | Repeater | yes — management only restricted (TODO) |
+| Xiaomi Poco X3 NFC | Client | yes |
 
 ## Build and install
 
