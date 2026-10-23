@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=ubMeshcore
+Comment=Bluetooth companion for MeshCore nodes
+Exec=ubmeshcore %U
+Icon=ubmeshcore.png
+Terminal=false
+Type=Application
+Categories=Network;
+X-Lomiri-Touch=true

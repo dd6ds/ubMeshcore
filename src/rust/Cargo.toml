@@ -1,0 +1,16 @@
+[package]
+name = "ubmeshcore_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ubmeshcore_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+meshcore-proto = { path = "../../../meshcore-info-display/crates/meshcore-proto" }
+mc-hal = { path = "../../../meshcore-info-display/crates/mc-hal" }
+meshcore-node = { path = "../../../meshcore-info-display/crates/meshcore-node" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"

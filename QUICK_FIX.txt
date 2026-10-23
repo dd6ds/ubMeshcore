@@ -1,0 +1,40 @@
+=================================================================
+ubMeshcore App Start Fix - QUICK COMMANDS
+=================================================================
+
+RUN THESE COMMANDS ONE AT A TIME:
+
+1. Check device is connected:
+   adb devices
+
+2. Get phone IP address:
+   adb shell ip route | awk '{print $9}'
+   (Write down the IP number, e.g., 192.168.1.100)
+
+3. SSH into phone and fix AppArmor:
+   ssh phablet@YOUR_PHONE_IP
+   sudo aa-complain click_ubmeshcore_ubmeshcore_0.2.1
+   (Enter password: try 1234, phablet, or leave blank)
+   exit
+
+4. Launch the app:
+   adb shell lomiri-app-launch ubmeshcore_ubmeshcore_0.2.1
+
+=================================================================
+OR RUN THIS SCRIPT:
+=================================================================
+./FIX_APP_START.sh
+
+=================================================================
+IF SSH FAILS - TRY THESE PASSWORDS WITH ADB:
+=================================================================
+
+adb shell 'echo 1234 | sudo -S aa-complain click_ubmeshcore_ubmeshcore_0.2.1'
+
+adb shell 'echo phablet | sudo -S aa-complain click_ubmeshcore_ubmeshcore_0.2.1'
+
+adb shell 'echo 0000 | sudo -S aa-complain click_ubmeshcore_ubmeshcore_0.2.1'
+
+adb shell 'echo "" | sudo -S aa-complain click_ubmeshcore_ubmeshcore_0.2.1'
+
+=================================================================
