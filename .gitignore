@@ -35,3 +35,4 @@ BluetoothManager.qml.obsolete
 *.swp
 *~
 .DS_Store
+.git_codeberg
