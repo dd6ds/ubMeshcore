@@ -1,11 +1,5 @@
 # ubMeshcore
 
-> [!WARNING]
-> **Work in progress (WIP) — vibe coded.** This app was largely written with
-> AI assistance and has a lot of bugs. Expect missing features, rough edges and
-> things that break. Use it for experimenting, not as your only way to reach
-> your MeshCore node.
-
 A Bluetooth LE companion app for [MeshCore](https://meshcore.co.uk) nodes,
 built for Ubuntu Touch.
 
