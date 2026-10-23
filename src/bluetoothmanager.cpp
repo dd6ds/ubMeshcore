@@ -213,6 +213,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
                 // Align the node clock first: it stamps lastmod on every
                 // advert, which is what "last heard" is computed from.
                 m_companion.setDeviceTime();
+                m_companion.requestBattery();
                 QTimer::singleShot(600, this, [this]() {
                     if (m_sessionReady)
                         refreshContacts();
@@ -355,9 +356,13 @@ BluetoothManager::BluetoothManager(QObject *parent)
     // now and then picks such messages up.
     m_messagePollTimer.setInterval(60000);
     connect(&m_messagePollTimer, &QTimer::timeout, this, [this]() {
-        if (m_sessionReady)
+        if (m_sessionReady) {
             syncNextMessage();
+            m_companion.requestBattery();
+        }
     });
+    connect(&m_companion, &CompanionProtocol::batteryReceived,
+            this, &BluetoothManager::setBattery);
     m_messagePollTimer.start();
 
     m_writeTimer.setSingleShot(true);
@@ -681,6 +686,7 @@ void BluetoothManager::teardownConnection()
     m_uartReady = false;
     m_connected = false;
     m_connecting = false;
+    setBattery(0);
 }
 
 void BluetoothManager::selectDevice(const QString &address, const QString &name)
@@ -788,6 +794,7 @@ void BluetoothManager::onControllerDisconnected()
     m_uartReady = false;
     m_sessionReady = false;
     m_nodeName.clear();
+    setBattery(0);
     m_contactRefreshDebounce.stop();
     m_writeQueue.clear();
     m_writeTimer.stop();
@@ -804,6 +811,35 @@ void BluetoothManager::onControllerDisconnected()
     emit nodeInfoChanged();
     setConnectionState(tr("Not connected"));
     emit connectionChanged();
+}
+
+void BluetoothManager::setBattery(int milliVolts)
+{
+    if (milliVolts == m_batteryMv)
+        return;
+    m_batteryMv = milliVolts;
+    emit batteryChanged();
+}
+
+int BluetoothManager::batteryPercent() const
+{
+    if (m_batteryMv <= 0)
+        return -1;
+    // Typical LiPo discharge curve under light load: millivolts -> percent.
+    static const int curve[][2] = {
+        {4200, 100}, {4100, 90}, {4000, 80}, {3900, 65}, {3800, 50},
+        {3700, 35}, {3600, 20}, {3500, 10}, {3400, 5}, {3300, 0}
+    };
+    if (m_batteryMv >= curve[0][0])
+        return 100;
+    for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
+        if (m_batteryMv >= curve[i][0]) {
+            const int v0 = curve[i][0], v1 = curve[i - 1][0];
+            const int p0 = curve[i][1], p1 = curve[i - 1][1];
+            return p0 + (m_batteryMv - v0) * (p1 - p0) / (v1 - v0);
+        }
+    }
+    return 0;
 }
 
 void BluetoothManager::setStatus(const QString &status)

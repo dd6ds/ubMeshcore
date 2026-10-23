@@ -217,6 +217,20 @@ ApplicationWindow {
         return unread[String(idx)] || 0
     }
 
+    // Battery of the connected node, e.g. "Battery: 78% (3.95 V)".
+    function batteryText() {
+        var mv = BluetoothManager.batteryMilliVolts
+        if (mv <= 0)
+            return ""
+        return qsTr("Battery: %1% (%2 V)").arg(BluetoothManager.batteryPercent)
+                                          .arg((mv / 1000).toFixed(2))
+    }
+
+    function batteryColor() {
+        var p = BluetoothManager.batteryPercent
+        return p < 0 ? "#555" : p <= 15 ? "#b00" : p <= 35 ? "#e65100" : "#2e7d32"
+    }
+
     // Unread in all channels except the one open on the Messages page.
     function unreadElsewhere() {
         return unreadTotal - unreadFor(currentChannelIdx)
@@ -479,6 +493,14 @@ ApplicationWindow {
                     visible: BluetoothManager.sessionReady
                     font.pixelSize: rootWindow.fontBody
                     color: "#2e7d32"
+                    Layout.fillWidth: true
+                }
+
+                AppLabel {
+                    text: rootWindow.batteryText()
+                    visible: BluetoothManager.sessionReady && text.length > 0
+                    font.pixelSize: rootWindow.fontBody
+                    color: rootWindow.batteryColor()
                     Layout.fillWidth: true
                 }
 
@@ -877,7 +899,11 @@ ApplicationWindow {
                         }
                         AppLabel {
                             Layout.fillWidth: true
-                            text: BluetoothManager.sessionReady ? qsTr("session ready") : qsTr("no node session")
+                            text: BluetoothManager.sessionReady
+                                  ? qsTr("session ready")
+                                    + (BluetoothManager.batteryPercent >= 0
+                                       ? "  🔋 " + BluetoothManager.batteryPercent + "%" : "")
+                                  : qsTr("no node session")
                             color: BluetoothManager.sessionReady ? "#2e7d32" : "#b00"
                             font.pixelSize: rootWindow.fontSecondary
                         }

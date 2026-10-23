@@ -13,12 +13,12 @@
         <translation>Sitzung gestartet - </translation>
     </message>
     <message>
-        <location line="+146" />
+        <location line="+147" />
         <source>%1 message(s) fetched from node at %2</source>
         <translation>%1 Nachricht(en) um %2 vom Node abgerufen</translation>
     </message>
     <message>
-        <location line="+28" />
+        <location line="+32" />
         <source>Advert failed: </source>
         <translation>Advert fehlgeschlagen: </translation>
     </message>
@@ -117,7 +117,7 @@
         <translation>Fehler: </translation>
     </message>
     <message>
-        <location line="+61" />
+        <location line="+62" />
         <source>No device selected</source>
         <translation>Kein Gerät ausgewählt</translation>
     </message>
@@ -138,13 +138,13 @@
         <translation>Verbunden - Dienste werden gesucht...</translation>
     </message>
     <message>
-        <location line="+27" />
+        <location line="+28" />
         <source>Connection lost before the node confirmed the advert</source>
         <translation>Verbindung getrennt, bevor der Node das Advert bestätigt hat</translation>
     </message>
     <message>
         <location line="+7" />
-        <location line="+94" />
+        <location line="+123" />
         <location line="+128" />
         <source>Not connected</source>
         <translation>Nicht verbunden</translation>
@@ -329,7 +329,7 @@
 <context>
     <name>CompanionProtocol</name>
     <message>
-        <location filename="../src/companionprotocol.cpp" line="+651" />
+        <location filename="../src/companionprotocol.cpp" line="+670" />
         <source>unsupported command</source>
         <translation>nicht unterstützter Befehl</translation>
     </message>
@@ -881,7 +881,12 @@
 <context>
     <name>main</name>
     <message>
-        <location filename="../qml/main.qml" line="+307" />
+        <location filename="../qml/main.qml" line="+225" />
+        <source>Battery: %1% (%2 V)</source>
+        <translation>Akku: %1% (%2 V)</translation>
+    </message>
+    <message>
+        <location line="+96" />
         <source>Discover MeshCore Nodes</source>
         <translation>MeshCore-Nodes suchen</translation>
     </message>
@@ -902,12 +907,12 @@
     </message>
     <message>
         <location line="+25" />
-        <location line="+217" />
+        <location line="+225" />
         <source>Connected to: %1</source>
         <translation>Verbunden mit: %1</translation>
     </message>
     <message>
-        <location line="-216" />
+        <location line="-224" />
         <source>%1 device(s) found</source>
         <translation>%1 Gerät(e) gefunden</translation>
     </message>
@@ -952,22 +957,22 @@
         <translation>(ohne Namen)</translation>
     </message>
     <message>
-        <location line="+25" />
-        <location line="+715" />
+        <location line="+33" />
+        <location line="+719" />
         <source>Channels</source>
         <translation>Kanäle</translation>
     </message>
     <message>
-        <location line="-701" />
-        <location line="+554" />
+        <location line="-705" />
+        <location line="+558" />
         <location line="+160" />
         <source>Contacts</source>
         <translation>Kontakte</translation>
     </message>
     <message>
-        <location line="-699" />
+        <location line="-703" />
         <location line="+258" />
-        <location line="+295" />
+        <location line="+299" />
         <location line="+38" />
         <location line="+35" />
         <location line="+41" />
@@ -975,7 +980,7 @@
         <translation>Zurück</translation>
     </message>
     <message>
-        <location line="-655" />
+        <location line="-659" />
         <source>MeshCore Channels</source>
         <translation>MeshCore-Kanäle</translation>
     </message>
@@ -1070,12 +1075,12 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Kein Kanal</translation>
     </message>
     <message>
-        <location line="+6" />
+        <location line="+7" />
         <source>session ready</source>
         <translation>Sitzung bereit</translation>
     </message>
     <message>
-        <location line="+0" />
+        <location line="+3" />
         <source>no node session</source>
         <translation>keine Node-Sitzung</translation>
     </message>

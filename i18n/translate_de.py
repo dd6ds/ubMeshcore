@@ -16,6 +16,7 @@ DE = {
     # --- connection / Bluetooth -------------------------------------------
     "Session started": "Sitzung gestartet",
     "Session started - ": "Sitzung gestartet - ",
+    "Battery: %1% (%2 V)": "Akku: %1% (%2 V)",
     "Checking Bluetooth...": "Bluetooth wird geprüft...",
     "Scan finished - %1 device(s)": "Suche beendet - %1 Gerät(e)",
     "No Bluetooth adapter found": "Kein Bluetooth-Adapter gefunden",

@@ -103,6 +103,9 @@ class BluetoothManager : public QObject
     /// Result of the last "Advert" tap, e.g. "✓ Flood advert sent at 09:41:07".
     Q_PROPERTY(QString lastAdvertInfo READ lastAdvertInfo NOTIFY advertInfoChanged)
     Q_PROPERTY(bool lastAdvertOk READ lastAdvertOk NOTIFY advertInfoChanged)
+    /// Battery of the connected node; 0 / -1 while unknown.
+    Q_PROPERTY(int batteryMilliVolts READ batteryMilliVolts NOTIFY batteryChanged)
+    Q_PROPERTY(int batteryPercent READ batteryPercent NOTIFY batteryChanged)
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
@@ -173,6 +176,9 @@ public:
     int maxChannels() const { return m_maxChannels; }
     QString lastAdvertInfo() const { return m_lastAdvertInfo; }
     bool lastAdvertOk() const { return m_advertOk; }
+    int batteryMilliVolts() const { return m_batteryMv; }
+    /// Estimated from the voltage (single LiPo cell), -1 = unknown.
+    int batteryPercent() const;
 
     Q_INVOKABLE void selectDevice(const QString &address, const QString &name);
     Q_INVOKABLE bool connectToSelected();
@@ -205,6 +211,7 @@ signals:
     void syncInfoChanged();
     void advertInfoChanged();
     void contactLimitChanged();
+    void batteryChanged();
     /// A channel slot was added or removed: any stored history and unread
     /// count for that index belong to the previous channel and must go.
     void channelSlotCleared(int channelIdx);
@@ -295,6 +302,8 @@ private:
     bool m_reportDrain = false;         // drain started by us (connect/resume/poll)
     QString m_lastSyncInfo;
     QTimer m_messagePollTimer;          // safety poll of the node's queue
+    int m_batteryMv = 0;                // node battery, 0 = unknown
+    void setBattery(int milliVolts);
 
     int m_maxChannels = 0;              // from DEVICE_INFO; 0 = unknown
     int m_maxContacts = 0;              // node contact table size, 0 = unknown

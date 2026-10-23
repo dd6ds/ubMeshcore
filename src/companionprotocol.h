@@ -53,6 +53,7 @@ public:
         CmdAddUpdateContact  = 9,
         CmdRemoveContact     = 15,
         CmdSyncNextMessage   = 10,
+        CmdGetBattAndStorage = 20,
         CmdDeviceQuery       = 22,
         CmdSendLogin         = 26,
         CmdSendStatusReq     = 27,
@@ -78,6 +79,7 @@ public:
         RespChannelMsgRecv = 8,
         RespCurrTime       = 9,
         RespNoMoreMessages = 10,
+        RespBattAndStorage = 12,
         RespDeviceInfo     = 13,
         // Verified on a live DD6DS-Mobile node: channel messages come back as
         // 0x11 and the channel table as 0x12, not as the lower numbers the
@@ -108,6 +110,8 @@ public:
     void requestChannel(int channelIdx);
     /// CMD_DEVICE_QUERY (app protocol v3) -> RESP_DEVICE_INFO with max_channels.
     void sendDeviceQuery();
+    /// CMD_GET_BATT_AND_STORAGE -> RESP_BATT_AND_STORAGE (battery voltage).
+    void requestBattery();
     /// CMD_ADD_UPDATE_CONTACT: store a contact in the node's table.
     void addUpdateContact(const MeshContact &contact);
     /// CMD_REMOVE_CONTACT: delete a contact from the node's table.
@@ -146,6 +150,8 @@ signals:
 
     void selfInfoReceived(const QString &name);
     void deviceInfoReceived(int firmwareVersion, int maxChannels, int maxContacts);
+    /// Battery voltage of the node in millivolts.
+    void batteryReceived(int milliVolts);
     /// Emitted for empty slots too (name empty), so free slots are known.
     void channelInfoReceived(int channelIdx, const QString &name);
     void channelMessageReceived(int channelIdx, const QString &text, quint32 timestamp,

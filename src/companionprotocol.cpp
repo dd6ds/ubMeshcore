@@ -44,6 +44,7 @@ QString CompanionProtocol::commandName(quint8 code)
     case CmdAddUpdateContact:  return QStringLiteral("ADD_UPDATE_CONTACT");
     case CmdRemoveContact:     return QStringLiteral("REMOVE_CONTACT");
     case CmdSyncNextMessage:   return QStringLiteral("SYNC_NEXT_MESSAGE");
+    case CmdGetBattAndStorage: return QStringLiteral("GET_BATT_AND_STORAGE");
     case CmdDeviceQuery:       return QStringLiteral("DEVICE_QUERY");
     case CmdSendLogin:         return QStringLiteral("SEND_LOGIN");
     case CmdSendStatusReq:     return QStringLiteral("SEND_STATUS_REQ");
@@ -71,6 +72,7 @@ QString CompanionProtocol::responseName(quint8 code)
     case RespChannelMsgRecv: return QStringLiteral("CHANNEL_MSG_RECV_8");
     case RespCurrTime:       return QStringLiteral("CURR_TIME");
     case RespNoMoreMessages: return QStringLiteral("NO_MORE_MESSAGES");
+    case RespBattAndStorage: return QStringLiteral("BATT_AND_STORAGE");
     case RespDeviceInfo:     return QStringLiteral("DEVICE_INFO");
     case PushAdvert:         return QStringLiteral("PUSH_ADVERT");
     case PushPathUpdated:    return QStringLiteral("PUSH_PATH_UPDATED");
@@ -141,6 +143,13 @@ void CompanionProtocol::sendDeviceQuery()
     QByteArray frame;
     frame.append(char(CmdDeviceQuery));
     frame.append(char(3));          // app protocol version we understand
+    emitFrame(frame);
+}
+
+void CompanionProtocol::requestBattery()
+{
+    QByteArray frame;
+    frame.append(char(CmdGetBattAndStorage));
     emitFrame(frame);
 }
 
@@ -534,6 +543,16 @@ void CompanionProtocol::handleFrame(const QByteArray &frame)
         qDebug() << "Companion: DEVICE_INFO fw" << fwVer << "max channels" << maxChannels
                  << "max contacts" << maxContacts;
         emit deviceInfoReceived(fwVer, maxChannels, maxContacts);
+        break;
+    }
+
+    case RespBattAndStorage: {
+        // <battery_mv:u16> [<used_kb:u32> <total_kb:u32>]
+        if (payload.size() < 2)
+            break;
+        const int mv = int(quint8(payload.at(0))) | (int(quint8(payload.at(1))) << 8);
+        qDebug() << "Companion: BATT_AND_STORAGE" << mv << "mV";
+        emit batteryReceived(mv);
         break;
     }
 
