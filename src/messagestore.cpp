@@ -1,3 +1,5 @@
+// MessageStore: channel messages as JSON lines, plus last channel and unread counts.
+
 #include "messagestore.h"
 
 #include <QDateTime>

@@ -58,14 +58,14 @@ Item {
         return hops === 1 ? qsTr("1 hop") : qsTr("%1 hops").arg(hops)
     }
 
+    // main.qml root: shared message model and the direct-message helpers.
+    property var app
+
     StackView {
         id: stack
         anchors.fill: parent
         initialItem: listPage
     }
-
-    // main.qml root: shared message model and the direct-message helpers.
-    property var app
 
     function openChat(keyHex, contactName) {
         stack.push(chatComponent, { app: root.app, keyHex: keyHex, contactName: contactName })
@@ -81,7 +81,17 @@ Item {
         }
     }
 
-    // Long-press menu of a contact row.
+    // Long-press menu of a contact row. contact = the row's model data.
+    function showContactMenu(contact, item, x, y) {
+        contactMenu.keyHex = contact.publicKey
+        contactMenu.contactName = contact.name
+        contactMenu.contactType = contact.type
+        contactMenu.favorite = contact.isFavorite
+        contactMenu.onNode = contact.onNode
+        var p = item.mapToItem(root, x, y)
+        contactMenu.popup(root, p.x, p.y)
+    }
+
     Menu {
         id: contactMenu
         property string keyHex: ""
@@ -163,7 +173,7 @@ Item {
         standardButtons: Dialog.Yes | Dialog.Cancel
         // The text sits in a plain Item with its own implicit size, so the
         // dialog's height does not feed back into the text's wrapping width
-        // (that was the "binding loop" warning).
+        // ("binding loop" warning).
         contentItem: Item {
             implicitHeight: deleteText.implicitHeight
             AppLabel {
@@ -222,7 +232,8 @@ Item {
                                 .arg(BluetoothManager.contactsModel.count)
                                 .arg(BluetoothManager.contactsModel.nodeCount)
                                 .arg(BluetoothManager.maxContacts)
-                              : qsTr("%1 contact(s) from received adverts").arg(BluetoothManager.contactsModel.count)
+                              : qsTr("%1 contact(s) from received adverts")
+                                .arg(BluetoothManager.contactsModel.count)
                 }
                 Button {
                     text: qsTr("Refresh")
@@ -266,7 +277,8 @@ Item {
                         id: quickSelectButton
                         text: qsTr("Select ▾")
                         font.pixelSize: root.fontSecondary
-                        onClicked: quickSelectMenu.popup(quickSelectButton, 0, quickSelectButton.height)
+                        onClicked: quickSelectMenu.popup(quickSelectButton, 0,
+                                                         quickSelectButton.height)
                     }
                     // Quick selections. Favourites are kept out of every one
                     // except "All" - deleting them should always be deliberate.
@@ -329,8 +341,8 @@ Item {
                 }
             }
 
-            // Result of the last "Advert" tap - without it there was no way to
-            // tell whether the node actually sent anything.
+            // Result of the last "Advert" tap, so the user can tell whether
+            // the node actually sent anything.
             Rectangle {
                 Layout.fillWidth: true
                 visible: BluetoothManager.lastAdvertInfo.length > 0
@@ -347,67 +359,15 @@ Item {
                     color: BluetoothManager.lastAdvertOk ? "#1b5e20" : "#b71c1c"
                     text: BluetoothManager.lastAdvertInfo
                           + (BluetoothManager.lastAdvertInfo.indexOf("✓") === 0
-                             ? qsTr(" - nodes and repeaters in range will list you after receiving it.")
+                             ? qsTr(" - nodes and repeaters in range will list you "
+                                    + "after receiving it.")
                              : "")
                 }
             }
 
-            AppField {
+            ContactFilterBar {
                 Layout.fillWidth: true
-                placeholderText: qsTr("Search name or key...")
-                text: root.searchText
-                onTextChanged: root.searchText = text
-            }
-
-            // Type filter
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Math.round(root.gu * 0.5)
-                Repeater {
-                    model: [ { k: "all", t: qsTr("All") }, { k: "repeater", t: qsTr("Repeaters") },
-                             { k: "chat", t: qsTr("Companions") }, { k: "room", t: qsTr("Rooms") } ]
-                    delegate: Button {
-                        text: modelData.t
-                        checkable: true
-                        autoExclusive: true
-                        checked: root.typeFilter === modelData.k
-                        font.pixelSize: root.fontSecondary
-                        Layout.fillWidth: true
-                        onClicked: root.typeFilter = modelData.k
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                CheckBox {
-                    checked: root.favoritesOnly
-                    onToggled: root.favoritesOnly = checked
-                }
-                AppLabel {
-                    Layout.fillWidth: true
-                    text: qsTr("★ Only favourites")
-                    font.pixelSize: root.fontSecondary
-                    wrapMode: Text.Wrap
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.favoritesOnly = !root.favoritesOnly
-                    }
-                }
-                CheckBox {
-                    checked: root.activeOnly
-                    onToggled: root.activeOnly = checked
-                }
-                AppLabel {
-                    Layout.fillWidth: true
-                    text: qsTr("Only active (24 h)")
-                    font.pixelSize: root.fontSecondary
-                    wrapMode: Text.Wrap
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.activeOnly = !root.activeOnly
-                    }
-                }
+                list: root
             }
 
             ListView {
@@ -435,138 +395,9 @@ Item {
                                  + "yourself.")
                 }
 
-                delegate: Item {
-                    // Non-matching rows collapse instead of leaving the model.
-                    readonly property bool shown: root.matches(type, name, keyPrefix, isActive, isFavorite)
-                    readonly property bool manageable: type === "repeater" || type === "room"
-                    width: ListView.view ? ListView.view.width : 0
-                    height: shown ? card.height + Math.round(root.gu * 0.6) : 0
-                    visible: shown
-
-                    Rectangle {
-                        id: card
-                        width: parent.width
-                        height: Math.round(root.gu * 7.5)
-                        radius: Math.round(root.gu * 0.5)
-                        readonly property bool isSelected: root.selectMode && root.selected[publicKey] === true
-                        color: isSelected ? "#ffe0b2" : (tap.pressed ? "#d6e8ff" : "#f5f5f5")
-                        border.color: root.typeColor(type)
-                        border.width: 2
-                        opacity: isActive ? 1.0 : 0.6
-
-                        RowLayout {
-                            z: 1
-                            anchors.fill: parent
-                            anchors.margins: Math.round(root.gu * 0.8)
-                            spacing: root.spacingUnit
-
-                            // Selection box (selection mode only).
-                            Rectangle {
-                                visible: root.selectMode
-                                Layout.preferredWidth: Math.round(root.gu * 2.6)
-                                Layout.preferredHeight: Layout.preferredWidth
-                                radius: 4
-                                border.color: "#e65100"
-                                border.width: 2
-                                color: card.isSelected ? "#e65100" : "white"
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: card.isSelected
-                                    text: "✓"
-                                    color: "white"
-                                    font.bold: true
-                                    font.pixelSize: Math.round(root.gu * 1.8)
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.preferredWidth: Math.round(root.gu * 1.2)
-                                Layout.preferredHeight: Layout.preferredWidth
-                                radius: width / 2
-                                color: isActive ? "#2e7d32" : "#9e9e9e"
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                AppLabel {
-                                    Layout.fillWidth: true
-                                    text: name
-                                    font.bold: true
-                                    font.pixelSize: root.fontBody
-                                    elide: Text.ElideRight
-                                }
-                                AppLabel {
-                                    Layout.fillWidth: true
-                                    text: root.typeLabel(type) + "  ·  " + root.hopsText(hops)
-                                          + "  ·  " + lastHeardText
-                                          + (onNode ? "" : "  ·  " + qsTr("not on node"))
-                                    // Orange: heard, but not in the node's table -
-                                    // direct messages save it there first.
-                                    color: onNode ? "#555" : "#e65100"
-                                    font.pixelSize: root.fontSecondary
-                                    elide: Text.ElideRight
-                                }
-                            }
-
-                            // Unread direct messages from this contact.
-                            UnreadBadge {
-                                count: root.app ? root.app.dmUnreadFor(publicKey) : 0
-                            }
-
-                            AppLabel {
-                                visible: manageable || type === "chat"
-                                text: manageable ? qsTr("Manage ›") : qsTr("Chat ›")
-                                color: root.typeColor(type)
-                                font.pixelSize: root.fontSecondary
-                            }
-
-                            // Favourite toggle. The RowLayout is raised above
-                            // the row-wide MouseArea (z: 1), so a tap on the
-                            // star toggles it instead of opening the admin page.
-                            AppLabel {
-                                text: isFavorite ? "★" : "☆"
-                                color: isFavorite ? "#f9a825" : "#9e9e9e"
-                                font.pixelSize: Math.round(root.gu * 2.6)
-                                Layout.preferredWidth: Math.round(root.gu * 3.5)
-                                horizontalAlignment: Text.AlignHCenter
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.margins: -Math.round(root.gu * 0.6)
-                                    onClicked: BluetoothManager.contactsModel.toggleFavorite(publicKey)
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            id: tap
-                            anchors.fill: parent
-                            // Tap: chat with companions, admin for repeaters/rooms.
-                            // In selection mode a tap (de)selects instead.
-                            onClicked: {
-                                if (root.selectMode)
-                                    root.toggleSelected(publicKey)
-                                else if (type === "chat")
-                                    root.openChat(publicKey, name)
-                                else if (manageable)
-                                    root.openAdmin(publicKey, name, type)
-                            }
-                            // Long press: menu with all options.
-                            onPressAndHold: {
-                                if (root.selectMode) {
-                                    root.toggleSelected(publicKey)
-                                    return
-                                }
-                                contactMenu.keyHex = publicKey
-                                contactMenu.contactName = name
-                                contactMenu.contactType = type
-                                contactMenu.favorite = isFavorite
-                                contactMenu.onNode = onNode
-                                var p = mapToItem(root, mouse.x, mouse.y)
-                                contactMenu.popup(root, p.x, p.y)
-                            }
-                        }
-                    }
+                delegate: ContactRow {
+                    list: root
+                    contact: model
                 }
             }
         }

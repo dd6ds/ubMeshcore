@@ -1,3 +1,5 @@
+// ContactListModel: the node's contacts, favourites and "last heard" ages.
+
 #include "contactmodel.h"
 
 #include <QDateTime>
@@ -158,8 +160,10 @@ void ContactListModel::sortByRecency()
     // Favourites first, then most recently heard.
     std::stable_sort(m_contacts.begin(), m_contacts.end(),
                      [this](const MeshContact &a, const MeshContact &b) {
-                         const bool fa = m_favorites.contains(QString::fromLatin1(a.publicKey.toHex()));
-                         const bool fb = m_favorites.contains(QString::fromLatin1(b.publicKey.toHex()));
+                         const bool fa = m_favorites.contains(
+                             QString::fromLatin1(a.publicKey.toHex()));
+                         const bool fb = m_favorites.contains(
+                             QString::fromLatin1(b.publicKey.toHex()));
                          if (fa != fb)
                              return fa;
                          return a.lastHeard() > b.lastHeard();

@@ -85,7 +85,7 @@ Item {
         }
         onSendFailed: {
             // Always show it here: failures such as "not connected" happen
-            // before anything is pending and used to be swallowed silently.
+            // before anything is pending and would otherwise go unnoticed.
             waitTimer.stop()
             admin.log("! " + reason)
             admin.busy = ""
@@ -165,8 +165,10 @@ Item {
                     font.pixelSize: admin.fontSecondary
                     color: "#e65100"
                     text: BluetoothManager.connected
-                          ? qsTr("Connected, node session still starting... (%1)").arg(BluetoothManager.connectionState)
-                          : qsTr("Not connected to your node. Go to the device page and connect again, then come back.")
+                          ? qsTr("Connected, node session still starting... (%1)")
+                            .arg(BluetoothManager.connectionState)
+                          : qsTr("Not connected to your node. Go to the device page and "
+                                 + "connect again, then come back.")
                 }
             }
 
@@ -216,7 +218,8 @@ Item {
                 wrapMode: Text.Wrap
                 color: admin.isAdmin ? "#2e7d32" : (admin.loggedIn ? "#f57c00" : "#666")
                 text: admin.isAdmin ? qsTr("Admin session active - CLI commands enabled")
-                    : admin.loggedIn ? qsTr("Guest login - status only, CLI needs the admin password")
+                    : admin.loggedIn
+                      ? qsTr("Guest login - status only, CLI needs the admin password")
                     : qsTr("Not logged in. Leave empty for guest access if the node allows it.")
             }
 
@@ -245,7 +248,8 @@ Item {
             AppLabel {
                 Layout.fillWidth: true
                 visible: admin.statusRows.length === 0
-                text: qsTr("No status yet. Most repeaters answer status requests only after a login.")
+                text: qsTr("No status yet. Most repeaters answer status requests "
+                           + "only after a login.")
                 color: "#888"
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap

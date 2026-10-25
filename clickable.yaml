@@ -22,19 +22,4 @@ ignore_review_errors: true
 
 build_args:
   - -DCMAKE_BUILD_TYPE=Release
-  # Enable once src/rust cross-compiles inside the container:
-  # - -DUSE_RUST_CORE=ON
 
-# --- Rust core library (currently disabled) --------------------------------
-# The clickable container already ships a cargo/rustc toolchain, so the Rust
-# cdylib can be built in the same container instead of on the host. Uncomment
-# together with -DUSE_RUST_CORE=ON above. Note that src/rust/Cargo.toml has
-# path dependencies on ../../../meshcore-info-display, which must be inside
-# the mounted project root for this to resolve.
-#
-# libraries:
-#   ubmeshcore_core:
-#     builder: rust
-#     src_dir: src/rust
-#     build_args:
-#       - --release

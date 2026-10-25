@@ -266,20 +266,6 @@ DE = {
     "No messages in this channel yet": "Noch keine Nachrichten in diesem Kanal",
     "Reply to %1": "%1 antworten",
     "Reply with route": "Mit Route antworten",
-    "Settings": "Einstellungen",
-    "App Settings": "App-Einstellungen",
-    "Node Administration": "Node-Verwaltung",
-    "About": "Über",
-    "Administer connected node": "Verbundenen Node verwalten",
-    "Admin Password": "Admin-Passwort",
-    "Send Command": "Befehl senden",
-    "About ubMeshcore": "Über ubMeshcore",
-    "Version %1": "Version %1",
-    "Bluetooth companion app for MeshCore nodes on Ubuntu Touch":
-        "Bluetooth-Companion-App für MeshCore-Nodes unter Ubuntu Touch",
-    "Based on meshcore-info-display project": "Basiert auf dem Projekt meshcore-info-display",
-    "Nodes": "Nodes",
-    "Messages": "Nachrichten",
 }
 
 TS = "i18n/ubmeshcore_de.ts"

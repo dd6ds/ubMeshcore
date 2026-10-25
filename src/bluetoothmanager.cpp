@@ -1,8 +1,12 @@
+// BluetoothManager, part 1: finding the node and talking to it over BLE.
+//
+// Scan for devices (Qt discovery + BlueZ over D-Bus for late names), open a
+// GATT connection, set up the Nordic UART Service and move bytes in and out.
+// What those bytes mean is handled in bluetoothmanager_mesh.cpp.
+
 #include "bluetoothmanager.h"
 
 #include <QBluetoothUuid>
-#include <QCryptographicHash>
-#include <QDateTime>
 #include <QLowEnergyDescriptor>
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -18,7 +22,9 @@ typedef QMap<QDBusObjectPath, InterfaceList> ManagedObjectList;
 Q_DECLARE_METATYPE(InterfaceList)
 Q_DECLARE_METATYPE(ManagedObjectList)
 
+
 namespace {
+
 
 // Nordic UART Service - used by the MeshCore companion radio BLE firmware.
 const QString kNusServiceUuid = QStringLiteral("{6e400001-b5a3-f393-e0a9-e50e24dcca9e}");
@@ -29,386 +35,54 @@ const QBluetoothUuid kNusService(QStringLiteral("{6e400001-b5a3-f393-e0a9-e50e24
 const QBluetoothUuid kNusRxChar (QStringLiteral("{6e400002-b5a3-f393-e0a9-e50e24dcca9e}"));
 const QBluetoothUuid kNusTxChar (QStringLiteral("{6e400003-b5a3-f393-e0a9-e50e24dcca9e}"));
 
-/// BlueZ falls back to "AA-BB-CC-DD-EE-FF" for the Alias of a device whose
-/// name it does not know. Qt hands that to us as the device name, which is why
-/// the list used to show the MAC address twice.
-bool looksLikeAddress(const QString &name, const QString &address)
-{
-    if (name.isEmpty())
-        return true;
-    QString n = name;
-    QString a = address;
-    n.remove(QLatin1Char(':')).remove(QLatin1Char('-')).remove(QLatin1Char(' '));
-    a.remove(QLatin1Char(':')).remove(QLatin1Char('-')).remove(QLatin1Char(' '));
-    a.remove(QLatin1Char('{')).remove(QLatin1Char('}'));
-    return n.compare(a, Qt::CaseInsensitive) == 0;
-}
 
 } // namespace
-
-bool DiscoveredDevice::isMeshCore() const
-{
-    return nusService || name.contains(QStringLiteral("meshcore"), Qt::CaseInsensitive);
-}
-
-QString DiscoveredDevice::displayName() const
-{
-    return hasRealName ? name : QStringLiteral("(no name)");
-}
-
-DeviceListModel::DeviceListModel(QObject *parent)
-    : QAbstractListModel(parent)
-{
-}
-
-int DeviceListModel::rowCount(const QModelIndex &parent) const
-{
-    return parent.isValid() ? 0 : m_devices.size();
-}
-
-QVariant DeviceListModel::data(const QModelIndex &index, int role) const
-{
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_devices.size())
-        return QVariant();
-
-    const DiscoveredDevice &device = m_devices.at(index.row());
-    switch (role) {
-    case NameRole:       return device.displayName();
-    case AddressRole:    return device.address;
-    case RssiRole:       return device.rssi;
-    case LowEnergyRole:  return device.lowEnergy;
-    case IsMeshCoreRole: return device.isMeshCore();
-    case HasNameRole:    return device.hasRealName;
-    default:             return QVariant();
-    }
-}
-
-QHash<int, QByteArray> DeviceListModel::roleNames() const
-{
-    return {
-        { NameRole,       "name" },
-        { AddressRole,    "address" },
-        { RssiRole,       "rssi" },
-        { LowEnergyRole,  "lowEnergy" },
-        { IsMeshCoreRole, "isMeshCore" },
-        { HasNameRole,    "hasName" }
-    };
-}
-
-int DeviceListModel::indexOfAddress(const QString &address) const
-{
-    for (int i = 0; i < m_devices.size(); ++i) {
-        if (m_devices.at(i).address.compare(address, Qt::CaseInsensitive) == 0)
-            return i;
-    }
-    return -1;
-}
-
-void DeviceListModel::clearDevices()
-{
-    if (m_devices.isEmpty())
-        return;
-    beginResetModel();
-    m_devices.clear();
-    endResetModel();
-    emit countChanged();
-}
-
-void DeviceListModel::addOrUpdate(DiscoveredDevice device)
-{
-    const int row = indexOfAddress(device.address);
-    if (row >= 0) {
-        const DiscoveredDevice &existing = m_devices.at(row);
-        // Never let a later, nameless update wipe a name we already resolved.
-        if (!device.hasRealName && existing.hasRealName) {
-            device.name = existing.name;
-            device.hasRealName = true;
-        }
-        device.nusService = device.nusService || existing.nusService;
-        m_devices[row] = device;
-        const QModelIndex idx = index(row, 0);
-        emit dataChanged(idx, idx);
-        return;
-    }
-
-    beginInsertRows(QModelIndex(), m_devices.size(), m_devices.size());
-    m_devices.append(device);
-    endInsertRows();
-    emit countChanged();
-}
-
-bool DeviceListModel::applyName(const QString &address, const QString &name, int rssi)
-{
-    const int row = indexOfAddress(address);
-    if (row < 0)
-        return false;
-
-    DiscoveredDevice &device = m_devices[row];
-    bool changed = false;
-    if (!name.isEmpty() && device.name != name) {
-        device.name = name;
-        device.hasRealName = true;
-        changed = true;
-    }
-    if (rssi != 0 && device.rssi != rssi) {
-        device.rssi = rssi;
-        changed = true;
-    }
-    if (changed) {
-        const QModelIndex idx = index(row, 0);
-        emit dataChanged(idx, idx);
-    }
-    return changed;
-}
-
-QString DeviceListModel::addressAt(int row) const
-{
-    if (row < 0 || row >= m_devices.size())
-        return QString();
-    return m_devices.at(row).address;
-}
 
 BluetoothManager::BluetoothManager(QObject *parent)
     : QObject(parent)
     , m_devices(this)
     , m_contacts(this)
 {
-    // Defer ALL D-Bus and Bluetooth initialization to avoid D-Bus access at startup
-    // when AppArmor might block it. Initialization happens on first scan/connect.
-    m_agent = nullptr;
-    m_localDevice = nullptr;
-
+    // While a scan runs, BlueZ is asked regularly for names Qt has not
+    // reported (see resolveNamesViaBlueZ).
     m_nameResolveTimer.setInterval(2000);
     connect(&m_nameResolveTimer, &QTimer::timeout,
             this, &BluetoothManager::resolveNamesViaBlueZ);
 
-    // --- companion protocol wiring ---------------------------------------
-    connect(&m_companion, &CompanionProtocol::writeRequested,
-            this, &BluetoothManager::writeToUart);
-    connect(&m_companion, &CompanionProtocol::traffic,
-            this, &BluetoothManager::appendTraffic);
-
-    connect(&m_companion, &CompanionProtocol::selfInfoReceived,
-            this, [this](const QString &name) {
-                m_nodeName = name;
-                m_sessionReady = true;
-                emit nodeInfoChanged();
-                setConnectionState(name.isEmpty()
-                                       ? tr("Session started")
-                                       : tr("Session started - ") + name);
-                emit connectionChanged();
-                // Ask how many channel slots the node has; the reply then
-                // triggers reading every slot (see deviceInfoReceived). If an
-                // old firmware does not answer, fall back to the first 4.
-                m_maxChannels = 0;
-                m_channelNames.clear();
-                emit channelsChanged();
-                m_companion.sendDeviceQuery();
-                QTimer::singleShot(2500, this, [this]() {
-                    if (m_sessionReady && m_maxChannels == 0)
-                        requestAllChannels(4);
-                });
-                // Fetch everything the node cached while we were away.
-                syncNextMessage();
-                // Align the node clock first: it stamps lastmod on every
-                // advert, which is what "last heard" is computed from.
-                m_companion.setDeviceTime();
-                m_companion.requestBattery();
-                QTimer::singleShot(600, this, [this]() {
-                    if (m_sessionReady)
-                        refreshContacts();
-                });
-            });
-
-    // --- contacts --------------------------------------------------------
-    connect(&m_companion, &CompanionProtocol::contactsSyncStarted,
-            this, [this](int total) {
-                qDebug() << "BluetoothManager: contact sync," << total << "contact(s)";
-                m_contactsSyncing = true;
-                emit contactsSyncingChanged();
-            });
-    connect(&m_companion, &CompanionProtocol::contactReceived,
-            this, [this](const MeshContact &c) { m_contacts.upsert(c); });
-    connect(&m_companion, &CompanionProtocol::contactsSyncFinished,
-            this, [this](quint32 lastMod) {
-                if (lastMod > m_contactsLastMod)
-                    m_contactsLastMod = lastMod;
-                m_contactsSyncing = false;
-                emit contactsSyncingChanged();
-            });
-    // A new advert was heard (repeater, companion, room...). The push only
-    // carries the key, so fetch the changed entries - debounced, because a
-    // flood advert is often heard several times via different repeaters.
-    m_contactRefreshDebounce.setSingleShot(true);
-    m_contactRefreshDebounce.setInterval(1500);
-    connect(&m_companion, &CompanionProtocol::contactChanged,
-            this, [this](const QByteArray &) { m_contactRefreshDebounce.start(); });
-    connect(&m_contactRefreshDebounce, &QTimer::timeout, this, [this]() {
-        if (m_sessionReady)
-            m_companion.requestContacts(m_contactsLastMod);
-    });
-    m_contactAgeTimer.setInterval(30000);
-    connect(&m_contactAgeTimer, &QTimer::timeout,
-            &m_contacts, &ContactListModel::refreshAges);
-    m_contactAgeTimer.start();
-
-    // --- repeater administration -------------------------------------------
-    connect(&m_companion, &CompanionProtocol::loginResult,
-            this, [this](const QByteArray &prefix, bool ok, bool admin) {
-                emit nodeLoginResult(keyHexForPrefix(prefix), ok, admin);
-            });
-    connect(&m_companion, &CompanionProtocol::statusResponse,
-            this, [this](const QByteArray &prefix, const QByteArray &data) {
-                emit nodeStatusReceived(keyHexForPrefix(prefix), parseNodeStatus(data));
-            });
-    connect(&m_companion, &CompanionProtocol::sendAccepted,
-            this, [this](quint32 timeoutMs) { emit nodeRequestSent(int(timeoutMs)); });
-    connect(&m_companion, &CompanionProtocol::contactMessageReceived,
-            this, [this](const QByteArray &prefix, quint8 txtType,
-                         const QString &text, quint32 ts) {
-                const QString key = keyHexForPrefix(prefix);
-                if (txtType == CompanionProtocol::TxtCliData) {
-                    emit nodeCliReply(key, text);
-                    return;
-                }
-                ++m_drainCount;
-                // Same sanity check as channel messages: keep the sender's
-                // time unless its clock is obviously off.
-                const qint64 now = QDateTime::currentSecsSinceEpoch();
-                const qint64 sent = (ts > 0 && qint64(ts) <= now + 3600
-                                     && qint64(ts) >= now - 30 * 86400) ? qint64(ts) : now;
-                emit directMessage(key, m_contacts.nameForKey(key), text, double(sent));
-            });
-
-    // --- direct message delivery -------------------------------------------
-    // RESP_SENT does not say which command it answers, but the node answers
-    // in order: m_sentFifo holds one entry per sent command that produces a
-    // RESP_SENT (DM, channel text, login, status, CLI) - the contact key for
-    // DMs, "" for the others.
-    connect(&m_companion, &CompanionProtocol::sendQueued,
-            this, [this](const QByteArray &ack, bool flood, quint32 timeoutMs) {
-                if (m_sentFifo.isEmpty())
-                    return;
-                const QString key = m_sentFifo.takeFirst();
-                if (!key.isEmpty())
-                    emit dmSent(key, QString::fromLatin1(ack.toHex()), flood, int(timeoutMs));
-            });
-    connect(&m_companion, &CompanionProtocol::sendConfirmed,
-            this, [this](const QByteArray &ack, quint32 rttMs) {
-                emit dmDelivered(QString::fromLatin1(ack.toHex()), int(rttMs));
-            });
-
-    connect(&m_companion, &CompanionProtocol::channelInfoReceived,
-            this, [this](int idx, const QString &name) {
-                while (m_channelNames.size() <= idx)
-                    m_channelNames.append(QString());
-                if (m_channelNames.at(idx) == name)
-                    return;
-                m_channelNames[idx] = name;
-                emit channelsChanged();
-            });
-    connect(&m_companion, &CompanionProtocol::deviceInfoReceived,
-            this, [this](int, int maxChannels, int maxContacts) {
-                if (maxContacts > 0 && maxContacts != m_maxContacts) {
-                    m_maxContacts = maxContacts;
-                    emit contactLimitChanged();
-                }
-                if (maxChannels <= 0 || m_maxChannels > 0)
-                    return;
-                m_maxChannels = maxChannels;
-                emit channelsChanged();
-                requestAllChannels(maxChannels);
-            });
-
-    connect(&m_companion, &CompanionProtocol::channelMessageReceived,
-            this, [this](int idx, const QString &text, quint32 ts, const MessagePath &path) {
-                // Messages from the node's offline cache can be hours old, so
-                // keep the sender's timestamp - unless the sender's clock is
-                // obviously wrong (future, or older than 30 days).
-                const qint64 now = QDateTime::currentSecsSinceEpoch();
-                const qint64 sent = (ts > 0 && qint64(ts) <= now + 3600
-                                     && qint64(ts) >= now - 30 * 86400) ? qint64(ts) : now;
-                const QString time =
-                    QDateTime::fromSecsSinceEpoch(sent).toString(QStringLiteral("HH:mm"));
-                ++m_drainCount;
-                emit channelMessage(idx, text, time, double(sent), routeInfo(path));
-            });
-
-    // --- node offline message queue --------------------------------------
-    // The node caches messages while the app is away and hands them over one
-    // per SYNC_NEXT_MESSAGE until NO_MORE_MESSAGES. Count each drain so the
-    // UI can say how many cached messages were fetched.
-    connect(&m_companion, &CompanionProtocol::noMoreMessages, this, [this]() {
-        // Live messages pass through the same queue (PUSH_MSG_WAITING -> one
-        // sync); only report drains we started, i.e. actual cached messages.
-        if (m_reportDrain && m_drainCount > 0) {
-            m_lastSyncInfo = tr("%1 message(s) fetched from node at %2")
-                                 .arg(m_drainCount)
-                                 .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm")));
-            qDebug() << "BluetoothManager:" << m_lastSyncInfo;
-            emit syncInfoChanged();
-        }
-        m_drainCount = 0;
-        m_reportDrain = false;
-    });
-    // Safety net: a PUSH_MSG_WAITING that arrives while Lomiri has the app
-    // suspended is lost, but the message stays queued on the node. Polling
-    // now and then picks such messages up.
-    m_messagePollTimer.setInterval(60000);
-    connect(&m_messagePollTimer, &QTimer::timeout, this, [this]() {
-        if (m_sessionReady) {
-            syncNextMessage();
-            m_companion.requestBattery();
-        }
-    });
-    connect(&m_companion, &CompanionProtocol::batteryReceived,
-            this, &BluetoothManager::setBattery);
-    m_messagePollTimer.start();
-
+    // Outgoing frames are paced, see writeToUart().
     m_writeTimer.setSingleShot(true);
     m_writeTimer.setInterval(kWriteGapMs);
     connect(&m_writeTimer, &QTimer::timeout, this, &BluetoothManager::flushWriteQueue);
 
-    connect(&m_companion, &CompanionProtocol::errorReported,
-            this, [this](const QString &what) {
-                if (m_advertPending) {
-                    m_advertPending = false;
-                    m_advertTimeout.stop();
-                    setAdvertInfo(false, tr("Advert failed: ") + what);
-                    return;
-                }
-                emit sendFailed(what);
-            });
+    connectCompanionSignals();
+    setupSessionTimers();
 
-    // --- advert confirmation ---------------------------------------------
-    connect(&m_companion, &CompanionProtocol::okReceived, this, [this]() {
-        if (!m_advertPending)
-            return;
-        m_advertPending = false;
-        m_advertTimeout.stop();
-        setAdvertInfo(true, QStringLiteral("✓ ") + tr("%1 advert sent at %2")
-                                .arg(m_advertFlood ? tr("Flood")
-                                                   : tr("Zero-hop"))
-                                .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"))));
-        qDebug() << "BluetoothManager:" << m_lastAdvertInfo;
-    });
-    m_advertTimeout.setSingleShot(true);
-    m_advertTimeout.setInterval(8000);
-    connect(&m_advertTimeout, &QTimer::timeout, this, [this]() {
-        if (!m_advertPending)
-            return;
-        m_advertPending = false;
-        setAdvertInfo(false, tr("No answer from the node - advert may not have been sent"));
-    });
-
-    // The adapter must be known BEFORE the first scan: the "Start Scan" button
-    // is only enabled once adapterReady is true, so creating the local device
-    // lazily inside startScan() meant the button could never be pressed.
-    // Deferred to the event loop so QBluetoothLocalDevice's internal timers
-    // are created on the GUI thread after QGuiApplication is fully up.
+    // No D-Bus or Bluetooth access in the constructor: it runs before the
+    // event loop, where AppArmor confinement has made it fail.
+    // The adapter must be known BEFORE the first scan, though: the "Start
+    // Scan" button is only enabled once adapterReady is true. Deferred to the
+    // event loop so QBluetoothLocalDevice's internal timers are created on
+    // the GUI thread after QGuiApplication is fully up.
     setStatus(tr("Checking Bluetooth..."));
     QTimer::singleShot(0, this, &BluetoothManager::ensureLocalDevice);
 }
+
+BluetoothManager::~BluetoothManager()
+{
+    teardownConnection();
+    if (m_localDevice) {
+        m_localDevice->deleteLater();
+        m_localDevice = nullptr;
+    }
+    if (m_agent) {
+        m_agent->deleteLater();
+        m_agent = nullptr;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scanning
+// ---------------------------------------------------------------------------
 
 void BluetoothManager::ensureLocalDevice()
 {
@@ -518,24 +192,8 @@ void BluetoothManager::startScan()
     }
 
     ensureLocalDevice();
-
-    if (!m_agent) {
-        qDebug() << "BluetoothManager: initializing device discovery agent";
-        m_agent = new QBluetoothDeviceDiscoveryAgent(this);
-        m_agent->setLowEnergyDiscoveryTimeout(15000);
-
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
-                this, &BluetoothManager::onDeviceDiscovered);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::deviceUpdated,
-                this, &BluetoothManager::onDeviceUpdated);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::finished,
-                this, &BluetoothManager::onScanFinished);
-        connect(m_agent, &QBluetoothDeviceDiscoveryAgent::canceled,
-                this, &BluetoothManager::onScanFinished);
-        connect(m_agent,
-                QOverload<QBluetoothDeviceDiscoveryAgent::Error>::of(&QBluetoothDeviceDiscoveryAgent::error),
-                this, &BluetoothManager::onScanError);
-    }
+    if (!m_agent)
+        createDiscoveryAgent();
 
     if (m_localDevice && m_localDevice->isValid()
         && m_localDevice->hostMode() == QBluetoothLocalDevice::HostPoweredOff) {
@@ -545,7 +203,6 @@ void BluetoothManager::startScan()
 
     if (!m_localDevice || !m_localDevice->isValid()) {
         setStatus(tr("No Bluetooth adapter found"));
-        emit scanComplete();
         return;
     }
 
@@ -556,7 +213,6 @@ void BluetoothManager::startScan()
         m_agent->supportedDiscoveryMethods();
     if (methods == QBluetoothDeviceDiscoveryAgent::NoMethod) {
         setStatus(tr("Discovery not supported on this device"));
-        emit scanComplete();
         return;
     }
 
@@ -567,6 +223,24 @@ void BluetoothManager::startScan()
     m_nameResolveTimer.start();
 }
 
+void BluetoothManager::createDiscoveryAgent()
+{
+    m_agent = new QBluetoothDeviceDiscoveryAgent(this);
+    m_agent->setLowEnergyDiscoveryTimeout(15000);
+
+    connect(m_agent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
+            this, &BluetoothManager::onDeviceDiscovered);
+    connect(m_agent, &QBluetoothDeviceDiscoveryAgent::deviceUpdated,
+            this, &BluetoothManager::onDeviceUpdated);
+    connect(m_agent, &QBluetoothDeviceDiscoveryAgent::finished,
+            this, &BluetoothManager::onScanFinished);
+    connect(m_agent, &QBluetoothDeviceDiscoveryAgent::canceled,
+            this, &BluetoothManager::onScanFinished);
+    using AgentError = QBluetoothDeviceDiscoveryAgent::Error;
+    connect(m_agent, QOverload<AgentError>::of(&QBluetoothDeviceDiscoveryAgent::error),
+            this, &BluetoothManager::onScanError);
+}
+
 void BluetoothManager::stopScan()
 {
     if (m_agent && m_agent->isActive())
@@ -575,7 +249,6 @@ void BluetoothManager::stopScan()
     resolveNamesViaBlueZ();
     setScanActive(false);
     setStatus(tr("Scan stopped"));
-    emit scanComplete();
 }
 
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
@@ -592,10 +265,8 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
         QTimer::singleShot(600, this, &BluetoothManager::resolveNamesViaBlueZ);
 }
 
-void BluetoothManager::onDeviceUpdated(const QBluetoothDeviceInfo &info,
-                                       QBluetoothDeviceInfo::Fields fields)
+void BluetoothManager::onDeviceUpdated(const QBluetoothDeviceInfo &info)
 {
-    Q_UNUSED(fields)
     const DiscoveredDevice device = toDiscoveredDevice(info);
     m_deviceInfos.insert(device.address.toUpper(), info);
     m_devices.addOrUpdate(device);
@@ -611,7 +282,6 @@ void BluetoothManager::onScanFinished()
     setStatus(m_devices.count() == 0
                   ? tr("Scan finished - no devices found")
                   : tr("Scan finished - %1 device(s)").arg(m_devices.count()));
-    emit scanComplete();
 
     // BlueZ can still be resolving names right after discovery stops.
     QTimer::singleShot(1500, this, &BluetoothManager::resolveNamesViaBlueZ);
@@ -645,48 +315,22 @@ void BluetoothManager::onScanError(QBluetoothDeviceDiscoveryAgent::Error error)
     m_nameResolveTimer.stop();
     setScanActive(false);
     setStatus(tr("Error: ") + message);
-    emit scanComplete();
 }
 
-// ---------------------------------------------------------------------------
-// BLE connection (GATT / Nordic UART Service)
-// ---------------------------------------------------------------------------
-
-BluetoothManager::~BluetoothManager()
+void BluetoothManager::setStatus(const QString &status)
 {
-    teardownConnection();
-    if (m_localDevice) {
-        m_localDevice->deleteLater();
-        m_localDevice = nullptr;
-    }
-    if (m_agent) {
-        m_agent->deleteLater();
-        m_agent = nullptr;
-    }
+    if (m_status == status)
+        return;
+    m_status = status;
+    emit statusChanged();
 }
 
-void BluetoothManager::teardownConnection()
+void BluetoothManager::setScanActive(bool active)
 {
-    m_rxCharacteristic = QLowEnergyCharacteristic();
-
-    if (m_uartService) {
-        m_uartService->deleteLater();
-        m_uartService = nullptr;
-    }
-    if (m_controller) {
-        // Drop our slots first, otherwise the disconnectFromDevice() below
-        // calls back into onControllerDisconnected() and the state is logged
-        // and emitted twice.
-        m_controller->disconnect(this);
-        m_controller->disconnectFromDevice();
-        m_controller->deleteLater();
-        m_controller = nullptr;
-    }
-
-    m_uartReady = false;
-    m_connected = false;
-    m_connecting = false;
-    setBattery(0);
+    if (m_scanActive == active)
+        return;
+    m_scanActive = active;
+    emit scanActiveChanged();
 }
 
 void BluetoothManager::selectDevice(const QString &address, const QString &name)
@@ -696,6 +340,10 @@ void BluetoothManager::selectDevice(const QString &address, const QString &name)
     m_selectedName = name;
     emit selectionChanged();
 }
+
+// ---------------------------------------------------------------------------
+// BLE connection (GATT / Nordic UART Service)
+// ---------------------------------------------------------------------------
 
 bool BluetoothManager::connectToSelected()
 {
@@ -771,6 +419,39 @@ void BluetoothManager::startController(const QBluetoothDeviceInfo &info,
     m_controller->connectToDevice();
 }
 
+void BluetoothManager::teardownConnection()
+{
+    m_rxCharacteristic = QLowEnergyCharacteristic();
+
+    if (m_uartService) {
+        m_uartService->deleteLater();
+        m_uartService = nullptr;
+    }
+    if (m_controller) {
+        // Drop our slots first, otherwise the disconnectFromDevice() below
+        // calls back into onControllerDisconnected() and the state is logged
+        // and emitted twice.
+        m_controller->disconnect(this);
+        m_controller->disconnectFromDevice();
+        m_controller->deleteLater();
+        m_controller = nullptr;
+    }
+
+    m_uartReady = false;
+    m_connected = false;
+    m_connecting = false;
+    setBattery(0);
+}
+
+void BluetoothManager::disconnect()
+{
+    qDebug() << "BluetoothManager: disconnect requested";
+    teardownConnection();
+    m_connectedDevice.clear();
+    setConnectionState(tr("Not connected"));
+    emit connectionChanged();
+}
+
 void BluetoothManager::onControllerConnected()
 {
     qDebug() << "BluetoothManager: connected, discovering services";
@@ -813,49 +494,31 @@ void BluetoothManager::onControllerDisconnected()
     emit connectionChanged();
 }
 
-void BluetoothManager::setBattery(int milliVolts)
+void BluetoothManager::onControllerError(QLowEnergyController::Error error)
 {
-    if (milliVolts == m_batteryMv)
-        return;
-    m_batteryMv = milliVolts;
-    emit batteryChanged();
-}
+    qWarning() << "BluetoothManager: controller error:" << error
+               << m_controller->errorString();
 
-int BluetoothManager::batteryPercent() const
-{
-    if (m_batteryMv <= 0)
-        return -1;
-    // Typical LiPo discharge curve under light load: millivolts -> percent.
-    static const int curve[][2] = {
-        {4200, 100}, {4100, 90}, {4000, 80}, {3900, 65}, {3800, 50},
-        {3700, 35}, {3600, 20}, {3500, 10}, {3400, 5}, {3300, 0}
-    };
-    if (m_batteryMv >= curve[0][0])
-        return 100;
-    for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
-        if (m_batteryMv >= curve[i][0]) {
-            const int v0 = curve[i][0], v1 = curve[i - 1][0];
-            const int p0 = curve[i][1], p1 = curve[i - 1][1];
-            return p0 + (m_batteryMv - v0) * (p1 - p0) / (v1 - v0);
+    // nRF52-based nodes (MeshCore) usually advertise with a random static
+    // address. If the public-address attempt fails, retry once as random.
+    if (!m_triedRandomAddress
+        && (error == QLowEnergyController::ConnectionError
+            || error == QLowEnergyController::UnknownRemoteDeviceError)) {
+        const QBluetoothDeviceInfo info = m_deviceInfos.value(m_connectedDevice.toUpper());
+        if (info.isValid()) {
+            qDebug() << "BluetoothManager: retrying with random address type";
+            m_triedRandomAddress = true;
+            teardownConnection();
+            startController(info, QLowEnergyController::RandomAddress);
+            return;
         }
     }
-    return 0;
-}
 
-void BluetoothManager::setStatus(const QString &status)
-{
-    if (m_status == status)
-        return;
-    m_status = status;
-    emit statusChanged();
-}
-
-void BluetoothManager::setScanActive(bool active)
-{
-    if (m_scanActive == active)
-        return;
-    m_scanActive = active;
-    emit scanActiveChanged();
+    m_connected = false;
+    m_connecting = false;
+    m_uartReady = false;
+    setConnectionState(tr("Connection failed: ") + m_controller->errorString());
+    emit connectionChanged();
 }
 
 void BluetoothManager::onServiceDiscoveryFinished()
@@ -927,6 +590,25 @@ void BluetoothManager::onServiceStateChanged(QLowEnergyService::ServiceState sta
     });
 }
 
+void BluetoothManager::onServiceError(QLowEnergyService::ServiceError error)
+{
+    qWarning() << "BluetoothManager: service error:" << error;
+    if (error == QLowEnergyService::DescriptorWriteError)
+        setConnectionState(tr("Could not enable notifications"));
+    emit connectionChanged();
+}
+
+void BluetoothManager::setConnectionState(const QString &state)
+{
+    if (m_connectionState == state)
+        return;
+    m_connectionState = state;
+}
+
+// ---------------------------------------------------------------------------
+// Moving bytes
+// ---------------------------------------------------------------------------
+
 void BluetoothManager::writeToUart(const QByteArray &data)
 {
     if (!m_uartService || !m_rxCharacteristic.isValid()) {
@@ -961,11 +643,13 @@ void BluetoothManager::flushWriteQueue()
     m_writeTimer.start();   // single shot; fires flushWriteQueue for the next
 }
 
-void BluetoothManager::requestAllChannels(int count)
+void BluetoothManager::onCharacteristicChanged(const QLowEnergyCharacteristic &characteristic,
+                                               const QByteArray &value)
 {
-    qDebug() << "BluetoothManager: reading" << count << "channel slot(s)";
-    for (int i = 0; i < count; ++i)
-        m_companion.requestChannel(i);
+    if (characteristic.uuid() != kNusTxChar)
+        return;
+    // Hand the frame to the companion-protocol decoder.
+    m_companion.handleFrame(value);
 }
 
 void BluetoothManager::appendTraffic(const QString &line)
@@ -974,538 +658,4 @@ void BluetoothManager::appendTraffic(const QString &line)
     while (m_trafficLog.size() > 60)
         m_trafficLog.removeFirst();
     emit trafficLogChanged();
-}
-
-bool BluetoothManager::sendChannelMessage(int channelIdx, const QString &text)
-{
-    if (text.isEmpty())
-        return false;
-    if (!m_uartReady) {
-        emit sendFailed(tr("Not connected to a node"));
-        return false;
-    }
-    if (!m_sessionReady) {
-        emit sendFailed(tr("Node session not started yet"));
-        return false;
-    }
-
-    qDebug() << "BluetoothManager: sending on channel" << channelIdx << ":" << text;
-    m_sentFifo.append(QString());
-    m_companion.sendChannelText(channelIdx, text);
-    return true;
-}
-
-void BluetoothManager::syncNextMessage()
-{
-    if (!m_uartReady) {
-        qDebug() << "BluetoothManager: syncNextMessage - UART not ready";
-        return;
-    }
-    qDebug() << "BluetoothManager: polling the node's message queue";
-    m_drainCount = 0;
-    m_reportDrain = true;
-    m_companion.syncNextMessage();
-}
-
-void BluetoothManager::onCharacteristicChanged(const QLowEnergyCharacteristic &characteristic,
-                                               const QByteArray &value)
-{
-    if (characteristic.uuid() != kNusTxChar)
-        return;
-
-    m_lastData = QString::fromLatin1(value.toHex(' '));
-    emit dataReceived(m_lastData);
-
-    // Hand the frame to the companion-protocol decoder.
-    m_companion.handleFrame(value);
-}
-
-void BluetoothManager::onServiceError(QLowEnergyService::ServiceError error)
-{
-    qWarning() << "BluetoothManager: service error:" << error;
-    if (error == QLowEnergyService::DescriptorWriteError)
-        setConnectionState(tr("Could not enable notifications"));
-    emit connectionChanged();
-}
-
-void BluetoothManager::onControllerError(QLowEnergyController::Error error)
-{
-    qWarning() << "BluetoothManager: controller error:" << error
-               << m_controller->errorString();
-
-    // nRF52-based nodes (MeshCore) usually advertise with a random static
-    // address. If the public-address attempt fails, retry once as random.
-    if (!m_triedRandomAddress
-        && (error == QLowEnergyController::ConnectionError
-            || error == QLowEnergyController::UnknownRemoteDeviceError)) {
-        const QBluetoothDeviceInfo info = m_deviceInfos.value(m_connectedDevice.toUpper());
-        if (info.isValid()) {
-            qDebug() << "BluetoothManager: retrying with random address type";
-            m_triedRandomAddress = true;
-            teardownConnection();
-            startController(info, QLowEnergyController::RandomAddress);
-            return;
-        }
-    }
-
-    m_connected = false;
-    m_connecting = false;
-    m_uartReady = false;
-    setConnectionState(tr("Connection failed: ") + m_controller->errorString());
-    emit connectionChanged();
-}
-
-void BluetoothManager::disconnect()
-{
-    qDebug() << "BluetoothManager: disconnect requested";
-    teardownConnection();
-    m_connectedDevice.clear();
-    setConnectionState(tr("Not connected"));
-    emit connectionChanged();
-}
-
-bool BluetoothManager::sendText(const QString &text)
-{
-    if (!m_uartService || !m_rxCharacteristic.isValid()) {
-        qWarning() << "BluetoothManager: sendText without a ready UART";
-        return false;
-    }
-
-    const QLowEnergyService::WriteMode mode =
-        (m_rxCharacteristic.properties() & QLowEnergyCharacteristic::WriteNoResponse)
-            ? QLowEnergyService::WriteWithoutResponse
-            : QLowEnergyService::WriteWithResponse;
-
-    m_uartService->writeCharacteristic(m_rxCharacteristic, text.toUtf8(), mode);
-    return true;
-}
-
-void BluetoothManager::setConnectionState(const QString &state)
-{
-    if (m_connectionState == state)
-        return;
-    m_connectionState = state;
-}
-
-// ---------------------------------------------------------------------------
-// Contacts and repeater administration
-// ---------------------------------------------------------------------------
-
-bool BluetoothManager::checkSession()
-{
-    if (!m_uartReady) {
-        emit sendFailed(tr("Not connected to a node"));
-        return false;
-    }
-    if (!m_sessionReady) {
-        emit sendFailed(tr("Node session not started yet"));
-        return false;
-    }
-    return true;
-}
-
-QString BluetoothManager::keyHexForPrefix(const QByteArray &prefix) const
-{
-    const MeshContact *c = m_contacts.findByPrefix(prefix);
-    return QString::fromLatin1(c ? c->publicKey.toHex() : prefix.toHex());
-}
-
-void BluetoothManager::refreshContacts()
-{
-    if (!checkSession())
-        return;
-    m_contactsLastMod = 0;
-    m_contacts.clearContacts();
-    m_companion.requestContacts(0);
-}
-
-void BluetoothManager::sendAdvert(bool flood)
-{
-    if (!checkSession()) {
-        setAdvertInfo(false, tr("Advert not sent - not connected to your node"));
-        return;
-    }
-    // The node answers SEND_SELF_ADVERT with OK once it has queued the
-    // advert for transmission (ERR if it could not). Commands are answered
-    // in order, so the next OK/ERR after this belongs to it.
-    m_advertPending = true;
-    m_advertFlood = flood;
-    m_advertTimeout.start();
-    setAdvertInfo(true, tr("Sending advert..."));
-    m_companion.sendSelfAdvert(flood);
-}
-
-void BluetoothManager::setAdvertInfo(bool ok, const QString &text)
-{
-    m_advertOk = ok;
-    m_lastAdvertInfo = text;
-    emit advertInfoChanged();
-}
-
-bool BluetoothManager::loginToNode(const QString &keyHex, const QString &password)
-{
-    if (!checkSession())
-        return false;
-    const MeshContact *c = m_contacts.findByKeyHex(keyHex);
-    if (!c) {
-        emit sendFailed(tr("Unknown node"));
-        return false;
-    }
-    m_sentFifo.append(QString());
-    m_companion.sendLogin(c->publicKey, password);
-    return true;
-}
-
-bool BluetoothManager::requestNodeStatus(const QString &keyHex)
-{
-    if (!checkSession())
-        return false;
-    const MeshContact *c = m_contacts.findByKeyHex(keyHex);
-    if (!c) {
-        emit sendFailed(tr("Unknown node"));
-        return false;
-    }
-    m_sentFifo.append(QString());
-    m_companion.sendStatusRequest(c->publicKey);
-    return true;
-}
-
-bool BluetoothManager::sendNodeCommand(const QString &keyHex, const QString &command)
-{
-    const QString cmd = command.trimmed();
-    if (cmd.isEmpty() || !checkSession())
-        return false;
-    const MeshContact *c = m_contacts.findByKeyHex(keyHex);
-    if (!c) {
-        emit sendFailed(tr("Unknown node"));
-        return false;
-    }
-    m_sentFifo.append(QString());
-    m_companion.sendDirectText(c->publicKey, cmd, CompanionProtocol::TxtCliData);
-    return true;
-}
-
-bool BluetoothManager::sendDirectMessage(const QString &keyHex, const QString &text)
-{
-    if (text.trimmed().isEmpty() || !checkSession())
-        return false;
-    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
-    if (!found) {
-        emit sendFailed(tr("Unknown contact"));
-        return false;
-    }
-    const MeshContact c = *found;
-    // The node only sends to contacts in its own table - otherwise it answers
-    // "not found". Contacts known only from an advert it did not store (its
-    // table is full, or manual-add mode) are saved first.
-    if (!c.onNode) {
-        if (!storeContactOnNode(c))
-            return false;
-    }
-    m_sentFifo.append(QString::fromLatin1(c.publicKey.toHex()));
-    m_companion.sendDirectText(c.publicKey, text.trimmed(), CompanionProtocol::TxtPlain);
-    return true;
-}
-
-bool BluetoothManager::storeContactOnNode(const MeshContact &c)
-{
-    if (m_maxContacts > 0 && m_contacts.nodeCount() >= m_maxContacts) {
-        emit sendFailed(tr("Your node's contact list is full (%1 of %2). Remove a contact "
-                           "first: long-press it in the contact list → Delete contact.")
-                            .arg(m_contacts.nodeCount()).arg(m_maxContacts));
-        return false;
-    }
-    qDebug() << "BluetoothManager: storing contact on node:" << c.name;
-    m_companion.addUpdateContact(c);
-    m_contacts.setOnNode(c.publicKey, true);
-    return true;
-}
-
-bool BluetoothManager::saveContactToNode(const QString &keyHex)
-{
-    if (!checkSession())
-        return false;
-    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
-    if (!found) {
-        emit sendFailed(tr("Unknown contact"));
-        return false;
-    }
-    if (found->onNode)
-        return true;
-    return storeContactOnNode(*found);
-}
-
-bool BluetoothManager::removeContactFromNode(const QString &keyHex)
-{
-    if (!checkSession())
-        return false;
-    const MeshContact *found = m_contacts.findByKeyHex(keyHex);
-    if (!found) {
-        emit sendFailed(tr("Unknown contact"));
-        return false;
-    }
-    const QByteArray key = found->publicKey;
-    // Only contacts in the node's table exist there; the others (known only
-    // from an advert the node did not store) are just dropped from the list.
-    if (found->onNode) {
-        qDebug() << "BluetoothManager: removing contact from node:" << found->name;
-        m_companion.removeContact(key);
-    } else {
-        qDebug() << "BluetoothManager: dropping contact (not on node):" << found->name;
-    }
-    // It reappears the next time its advert is heard.
-    m_contacts.removeContact(key);
-    return true;
-}
-
-int BluetoothManager::deleteContacts(const QStringList &keyHexes)
-{
-    if (!checkSession())
-        return 0;
-    int n = 0;
-    for (const QString &k : keyHexes) {
-        if (removeContactFromNode(k))
-            ++n;
-    }
-    qDebug() << "BluetoothManager: deleted" << n << "contact(s)";
-    return n;
-}
-
-namespace {
-
-quint16 rdU16(const QByteArray &d, int o)
-{
-    return quint16(quint8(d.at(o))) | (quint16(quint8(d.at(o + 1))) << 8);
-}
-
-quint32 rdU32(const QByteArray &d, int o)
-{
-    return quint32(rdU16(d, o)) | (quint32(rdU16(d, o + 2)) << 16);
-}
-
-QString durationText(quint32 secs)
-{
-    const quint32 d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60;
-    if (d > 0)
-        return BluetoothManager::tr("%1 d %2 h").arg(d).arg(h);
-    if (h > 0)
-        return BluetoothManager::tr("%1 h %2 min").arg(h).arg(m);
-    return BluetoothManager::tr("%1 min").arg(m);
-}
-
-QVariantMap row(const QString &label, const QString &value)
-{
-    return QVariantMap{ { QStringLiteral("label"), label },
-                        { QStringLiteral("value"), value } };
-}
-
-} // namespace
-
-QVariantList BluetoothManager::parseNodeStatus(const QByteArray &d)
-{
-    // Repeater status block (simple_repeater RepeaterStats, little endian):
-    //  0 batt_mv u16      2 tx_queue u16    4 noise_floor i16  6 last_rssi i16
-    //  8 pkts_recv u32   12 pkts_sent u32  16 air_time_s u32  20 uptime_s u32
-    // 24 sent_flood u32  28 sent_direct    32 recv_flood      36 recv_direct
-    // 40 err_events u16  42 last_snr i16 (x4)  44 direct_dups  46 flood_dups
-    // 48 rx_air_time_s u32
-    // Fields are read only as far as the block reaches, so older firmware
-    // with a shorter block still shows what it has.
-    QVariantList out;
-    const int n = d.size();
-    if (n >= 2)
-        out << row(tr("Battery"),
-                   QStringLiteral("%1 V").arg(rdU16(d, 0) / 1000.0, 0, 'f', 2));
-    if (n >= 24) {
-        out << row(tr("Uptime"), durationText(rdU32(d, 20)));
-        out << row(tr("Noise floor"),
-                   QStringLiteral("%1 dBm").arg(qint16(rdU16(d, 4))));
-        out << row(QStringLiteral("Last RSSI"),
-                   QStringLiteral("%1 dBm").arg(qint16(rdU16(d, 6))));
-        out << row(tr("TX queue"), QString::number(rdU16(d, 2)));
-        out << row(tr("Packets rx / tx"),
-                   QStringLiteral("%1 / %2").arg(rdU32(d, 8)).arg(rdU32(d, 12)));
-        out << row(tr("TX airtime"), durationText(rdU32(d, 16)));
-    }
-    if (n >= 40) {
-        out << row(tr("Flood rx / tx"),
-                   QStringLiteral("%1 / %2").arg(rdU32(d, 32)).arg(rdU32(d, 24)));
-        out << row(tr("Direct rx / tx"),
-                   QStringLiteral("%1 / %2").arg(rdU32(d, 36)).arg(rdU32(d, 28)));
-    }
-    if (n >= 44) {
-        out << row(tr("Last SNR"),
-                   QStringLiteral("%1 dB").arg(qint16(rdU16(d, 42)) / 4.0, 0, 'f', 1));
-        out << row(tr("Errors"), QString::number(rdU16(d, 40)));
-    }
-    if (n >= 48)
-        out << row(tr("Duplicates direct / flood"),
-                   QStringLiteral("%1 / %2").arg(rdU16(d, 44)).arg(rdU16(d, 46)));
-    if (n >= 52)
-        out << row(tr("RX airtime"), durationText(rdU32(d, 48)));
-    if (out.isEmpty())
-        out << row(tr("Raw"), QString::fromLatin1(d.toHex(' ')));
-    return out;
-}
-
-// ---------------------------------------------------------------------------
-// Message path presentation
-// ---------------------------------------------------------------------------
-
-QVariantMap BluetoothManager::routeInfo(const MessagePath &path) const
-{
-    // Flat strings rather than nested lists: they go straight into a QML
-    // ListModel row and into the JSON message history.
-    // Deliberately NOT translated (no tr()): the route is part of the message,
-    // stored in the history and sent to the mesh by "Reply with route" - it
-    // must read the same for everyone, whatever the phone's language.
-    QString summary;
-    QStringList detail;
-
-    if (path.direct) {
-        summary = QStringLiteral("direct");
-        detail << QStringLiteral("Sent direct (routed), not flooded");
-    } else if (path.hops == 0) {
-        summary = QStringLiteral("0 hops - heard directly");
-        detail << QStringLiteral("Sender") << QStringLiteral("   ↓  no repeater")
-               << QStringLiteral("You");
-    } else {
-        const QString hopsText = path.hops == 1 ? QStringLiteral("1 hop")
-                                                : QStringLiteral("%1 hops").arg(path.hops);
-        if (!path.pathKnown) {
-            // Offline-cache messages: the raw packet was never seen.
-            summary = hopsText;
-            detail << QStringLiteral("%1 (%2-byte hashes) - route not recorded:")
-                          .arg(hopsText).arg(path.hashSize)
-                   << QStringLiteral("the message came from the node's cache, so its "
-                         "raw packet was not seen by the app.");
-        } else {
-            QStringList hashes;
-            detail << QStringLiteral("Sender");
-            for (const QByteArray &h : path.hashes) {
-                const QString hex = QString::fromLatin1(h.toHex());
-                hashes << hex;
-                const QStringList names = m_contacts.namesForHopHash(h);
-                QString who;
-                if (names.isEmpty())
-                    who = QStringLiteral("unknown repeater");
-                else if (names.size() <= 3)
-                    who = names.join(QStringLiteral(" / "));
-                else
-                    who = QStringList(names.mid(0, 3)).join(QStringLiteral(" / "))
-                          + QStringLiteral(" / +%1").arg(names.size() - 3);
-                detail << QStringLiteral("   ↓  %1  %2").arg(hex, who);
-            }
-            detail << QStringLiteral("You");
-            summary = hopsText + QStringLiteral(" · ") + hashes.join(QStringLiteral(" › "));
-        }
-    }
-    if (path.radioKnown)
-        detail << QStringLiteral("Last hop: SNR %1 dB, RSSI %2 dBm")
-                      .arg(path.snr, 0, 'f', 1).arg(path.rssi);
-
-    return QVariantMap{
-        { QStringLiteral("hops"),        path.direct ? -1 : path.hops },
-        { QStringLiteral("route"),       summary },
-        { QStringLiteral("routeDetail"), detail.join(QLatin1Char('\n')) }
-    };
-}
-
-// ---------------------------------------------------------------------------
-// Channel management
-// ---------------------------------------------------------------------------
-
-QString BluetoothManager::normalizeChannelName(const QString &input) const
-{
-    QString name = input.trimmed();
-    if (name.isEmpty())
-        return QString();
-    if (!name.startsWith(QLatin1Char('#')))
-        name.prepend(QLatin1Char('#'));
-    // Hashtag names are case-sensitive in MeshCore ("#P53" != "#p53"), so the
-    // case is kept as typed. 31 bytes leave room for the terminating NUL.
-    if (name.size() < 2 || name.toUtf8().size() > 31 || name.contains(QLatin1Char(' ')))
-        return QString();
-    return name;
-}
-
-int BluetoothManager::channelIndexOf(const QString &name) const
-{
-    if (name.isEmpty())
-        return -1;
-    for (int i = 0; i < m_channelNames.size(); ++i) {
-        if (m_channelNames.at(i) == name)
-            return i;
-    }
-    return -1;
-}
-
-int BluetoothManager::addChannel(const QString &input)
-{
-    if (!checkSession())
-        return -1;
-    const QString name = normalizeChannelName(input);
-    if (name.isEmpty()) {
-        emit sendFailed(tr("\"%1\" is not a valid channel name").arg(input));
-        return -1;
-    }
-    const int existing = channelIndexOf(name);
-    if (existing >= 0)
-        return existing;
-    if (m_maxChannels <= 0) {
-        emit sendFailed(tr("Channel slots not read yet - try again in a moment"));
-        return -1;
-    }
-
-    int slot = -1;
-    for (int i = 0; i < m_maxChannels; ++i) {
-        if (i >= m_channelNames.size() || m_channelNames.at(i).isEmpty()) {
-            slot = i;
-            break;
-        }
-    }
-    if (slot < 0) {
-        emit sendFailed(tr("All %1 channel slots are in use - remove one first")
-                            .arg(m_maxChannels));
-        return -1;
-    }
-
-    // Hashtag channel key = first 16 bytes of SHA-256 over the name incl. '#'
-    // (verified against the node: "#ping", "#test").
-    const QByteArray secret =
-        QCryptographicHash::hash(name.toUtf8(), QCryptographicHash::Sha256).left(16);
-    m_companion.setChannel(slot, name, secret);
-    // Read the slot back: commands run in order, so this returns the new
-    // state (and the protocol learns the channel hash for message paths).
-    m_companion.requestChannel(slot);
-
-    while (m_channelNames.size() <= slot)
-        m_channelNames.append(QString());
-    m_channelNames[slot] = name;
-    emit channelSlotCleared(slot);
-    emit channelsChanged();
-    qDebug() << "BluetoothManager: added channel" << name << "in slot" << slot;
-    return slot;
-}
-
-bool BluetoothManager::removeChannel(int channelIdx)
-{
-    if (!checkSession())
-        return false;
-    if (channelIdx < 0 || channelIdx >= m_channelNames.size()
-        || m_channelNames.at(channelIdx).isEmpty()) {
-        emit sendFailed(tr("No channel in that slot"));
-        return false;
-    }
-    const QString name = m_channelNames.at(channelIdx);
-    // Empty name + all-zero secret is the documented "delete" form. (A NAMED
-    // slot with a zero secret would instead receive null-key traffic.)
-    m_companion.setChannel(channelIdx, QString(), QByteArray(16, char(0)));
-    m_companion.requestChannel(channelIdx);
-
-    m_channelNames[channelIdx] = QString();
-    emit channelSlotCleared(channelIdx);
-    emit channelsChanged();
-    qDebug() << "BluetoothManager: removed channel" << name << "from slot" << channelIdx;
-    return true;
 }

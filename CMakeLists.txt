@@ -34,11 +34,15 @@ add_custom_target(ubmeshcore_translations DEPENDS ${UBMESHCORE_QM_FILES})
 add_executable(ubmeshcore
     src/main.cpp
     src/bluetoothmanager.cpp
+    src/bluetoothmanager_mesh.cpp
     src/bluetoothmanager.h
     src/companionprotocol.cpp
+    src/companionprotocol_rx.cpp
     src/companionprotocol.h
     src/contactmodel.cpp
     src/contactmodel.h
+    src/devicelistmodel.cpp
+    src/devicelistmodel.h
     src/messagestore.cpp
     src/messagestore.h
     qml.qrc
@@ -49,19 +53,6 @@ target_include_directories(ubmeshcore PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(ubmeshcore
     Qt5::Core Qt5::Gui Qt5::Qml Qt5::Quick Qt5::Bluetooth Qt5::DBus)
-
-# ---------------------------------------------------------------------------
-# Optional Rust core library (src/rust). Enable with -DUSE_RUST_CORE=ON once
-# the meshcore-info-display path dependencies are reachable inside the
-# Clickable container.
-# ---------------------------------------------------------------------------
-option(USE_RUST_CORE "Link the ubmeshcore_core Rust cdylib" OFF)
-if(USE_RUST_CORE)
-    set(RUST_LIB "${CMAKE_CURRENT_SOURCE_DIR}/src/rust/target/aarch64-unknown-linux-gnu/release/libubmeshcore_core.so")
-    target_link_libraries(ubmeshcore "${RUST_LIB}")
-    set_target_properties(ubmeshcore PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
-    install(FILES "${RUST_LIB}" DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
-endif()
 
 # QML files are compiled into the binary via qml.qrc, so they are deliberately
 # NOT installed separately - that only bloated the click package with a second,

@@ -87,7 +87,6 @@ the mesh.
 | Repeater login / status / CLI | implemented; status block layout taken from repeater firmware, not the published spec |
 | Direct messages (chat, delivery confirmation) | implemented; delivery state is not kept across restarts |
 | Node contact table (full-table handling, save / remove contact) | implemented, not yet tested on the node |
-| Rust core (`src/rust`) | builds, not linked (`USE_RUST_CORE=OFF`) |
 
 ## Requirements
 
@@ -97,7 +96,7 @@ the mesh.
   which 24.04 still ships)
 - A MeshCore node running companion-radio firmware
 
-Everything else (Qt 5.12 cross toolchain, cargo) lives in the Clickable
+Everything else (the Qt 5.12 cross toolchain) lives in the Clickable
 container; nothing needs to be installed on the host.
 
 ## Prerequisites (Linux Mint)
@@ -180,34 +179,40 @@ clickable logs       # follow the app's output
 ## Layout
 
 ```
-CMakeLists.txt            Build; USE_RUST_CORE toggles the Rust library
+CMakeLists.txt            Build
 clickable.yaml            arm64 / ubuntu-sdk-20.04, container dependencies
 manifest.json             Click metadata (arch and framework patched by Clickable)
 ubmeshcore.apparmor       Policy groups, including the reserved "bluetooth" one
 qml.qrc                   QML is compiled into the binary, not installed separately
 
 src/main.cpp              Entry point, QML context properties, resume handling
-src/bluetoothmanager.*    Discovery, GATT connection, NUS plumbing, session,
-                          contact sync, repeater admin, offline-queue drain
+src/bluetoothmanager.h    The backend QML talks to ("BluetoothManager")
+src/bluetoothmanager.cpp  Scanning, GATT connection, Nordic UART I/O
+src/bluetoothmanager_mesh.cpp
+                          MeshCore session: channels, messages, contacts,
+                          repeater admin, offline-queue drain
+src/devicelistmodel.*     List model of scanned Bluetooth devices
 src/companionprotocol.*   MeshCore companion frame encode/decode
 src/contactmodel.*        Contact list model (adverts), favourites
-src/messagestore.*        Persistent channel message history, last channel
-src/rust/                 Rust core (ubmeshcore_core), currently unused
+src/messagestore.*        Persistent message history, unread counts, last channel
 
-qml/main.qml              Pages: discovery, connect, channels, messages, ...
-qml/ContactList.qml       Contacts page with filters and favourites
-qml/RepeaterAdmin.qml     Repeater / room server login, status, CLI
+qml/main.qml              Window, shared state (history, unread), page stack
+qml/DevicesPage.qml       Scan and pick a node
+qml/ConnectionPage.qml    Connect, node info, protocol trace
+qml/ChannelsPage.qml      Channel list, add / remove channels
+qml/ChannelPage.qml       Messages of one channel, send, reply
+qml/ContactsPage.qml      Hosts ContactList
+qml/ContactList.qml       Contacts with filters, favourites, multi-select
+qml/ContactFilterBar.qml  Search, type filter, favourites / active switches
+qml/ContactRow.qml        One contact in the list
 qml/DirectChat.qml        Direct message chat with one contact
+qml/RepeaterAdmin.qml     Repeater / room server login, status, CLI
 qml/UnreadBadge.qml       Red unread-count badge
 qml/AppLabel.qml          Label with an explicit colour
 qml/AppField.qml          TextField with an explicit colour and background
 ```
 
-`qml/NodeManager.qml`, `MessageView.qml` and `SettingsView.qml` are leftovers
-from the original scaffold and are not loaded. `MessageView.qml` does not even
-parse on Qt 5.12 — it uses `component`, a Qt 5.15 feature. The `config/`,
-`database/`, `managers/`, `maps/`, `models/`, `network/`, `qr/` and `utils/`
-directories are likewise not part of the build.
+Coding rules for contributions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Translations
 
@@ -224,8 +229,8 @@ the Clickable container (the host's `lupdate` is usually just a wrapper):
 ```bash
 docker run --rm -u $(id -u):$(id -g) -v "$PWD":/p -w /p \
   clickable/amd64-20.04-arm64:latest /usr/lib/qt5/bin/lupdate -no-obsolete \
-  -locations relative src/*.cpp qml/main.qml qml/ContactList.qml \
-  qml/RepeaterAdmin.qml qml/DirectChat.qml -ts i18n/ubmeshcore_de.ts
+  -locations relative src/*.cpp qml/*.qml \
+  -ts i18n/ubmeshcore_de.ts
 python3 i18n/translate_de.py   # fills German; lists any text still missing
 ```
 
@@ -424,22 +429,6 @@ overhears. It is decoded to a one-line summary and kept out of the UI.
   `CheckBox` instead of its `text`).
 - **The adapter is created at startup**, not lazily on the first scan: the
   *Start Scan* button is only enabled once the adapter is known to be ready.
-
-## Enabling the Rust core
-
-`src/rust` cross-compiles cleanly for `aarch64-unknown-linux-gnu` and exposes a
-C ABI (`meshcore_app_new`, `meshcore_process_data`, …). It is not linked yet
-because its path dependencies point at `../../../meshcore-info-display`, outside
-the project directory, and Clickable only mounts the project into the container.
-
-To use it, build the library with a wider mount and then configure with
-`-DUSE_RUST_CORE=ON`:
-
-```bash
-docker run --rm -v "$HOME/rust":/w -w /w/ubMeshcore/src/rust \
-  clickable/amd64-20.04-arm64:latest \
-  cargo build --release --target aarch64-unknown-linux-gnu
-```
 
 ## Debugging
 
