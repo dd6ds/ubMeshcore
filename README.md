@@ -1,5 +1,7 @@
 # ubMeshcore
 
+<img src="ubmeshcore.png" alt="ubMeshcore icon" width="80" align="right">
+
 A Bluetooth LE companion app for [MeshCore](https://meshcore.co.uk) nodes,
 built for Ubuntu Touch.
 
