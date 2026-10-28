@@ -1,9 +1,8 @@
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 
-// TextField with an explicit light background and dark text. Relying on the
-// platform palette gave dark text on a dark background, so whatever was typed
-// was invisible.
+// TextField with an explicit light background and dark text, so typed text
+// stays readable whatever palette the platform style brings.
 TextField {
     id: field
     color: "#111111"

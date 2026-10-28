@@ -1,3 +1,5 @@
+// Channel message history and small UI state kept across app restarts.
+
 #ifndef MESSAGESTORE_H
 #define MESSAGESTORE_H
 

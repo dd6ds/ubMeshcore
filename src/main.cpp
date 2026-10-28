@@ -1,3 +1,6 @@
+// Entry point: sets up logging, translations and the QML engine, and
+// exposes the C++ backend (BluetoothManager, MessageStore) to QML.
+
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -39,26 +42,11 @@ void logMessage(const QString &message) {
     qDebug().noquote() << message;
 }
 
-int main(int argc, char *argv[]) {
-    // Force the Default Controls 2 style. Otherwise the platform style brings
-    // its own palette, and controls that do not set explicit colours render
-    // dark-on-dark - which is why typed text was invisible.
-    qputenv("QT_QUICK_CONTROLS_STYLE", "Default");
-
-    // NOTE: QT_QPA_PLATFORM, MIR_SOCKET and the Qt plugin paths are set by
-    // lomiri-app-launch for the running shell. Do not override them here -
-    // hard-coding them breaks the app on other OS versions/devices.
-
-    QGuiApplication app(argc, argv);
-    app.setApplicationName("ubMeshcore");
-    app.setOrganizationName("ubmeshcore");
-    logMessage("=== ubMeshcore starting ===");
-
-    // --- language -----------------------------------------------------------
-    // Follows the language selected on the phone (Lomiri exports it as
-    // LANG/LANGUAGE, which QLocale::system() reads). App texts are embedded
-    // as :/i18n/ubmeshcore_<lang>.qm; English is the source language, so a
-    // missing translation simply leaves the English text.
+// Follows the language selected on the phone (Lomiri exports it as
+// LANG/LANGUAGE, which QLocale::system() reads). App texts are embedded as
+// :/i18n/ubmeshcore_<lang>.qm; English is the source language, so a missing
+// translation simply leaves the English text.
+static void installTranslators(QGuiApplication &app) {
     const QLocale locale = QLocale::system();
     QTranslator *appTranslator = new QTranslator(&app);
     if (appTranslator->load(locale, QStringLiteral("ubmeshcore"), QStringLiteral("_"),
@@ -74,16 +62,43 @@ int main(int argc, char *argv[]) {
     if (qtTranslator->load(locale, QStringLiteral("qtbase"), QStringLiteral("_"),
                            QLibraryInfo::location(QLibraryInfo::TranslationsPath)))
         app.installTranslator(qtTranslator);
+}
 
-    QQmlApplicationEngine engine;
+// Lomiri suspends background apps, which drops the BLE link. Reconnect to the
+// last selected node as soon as the app is in the foreground again.
+static void onAppStateChanged(BluetoothManager *bluetoothManager, Qt::ApplicationState state) {
+    if (state != Qt::ApplicationActive)
+        return;
+    if (bluetoothManager->sessionReady()) {
+        // Still connected, but "message waiting" pushes that arrived while
+        // suspended were lost - fetch whatever the node cached meanwhile.
+        logMessage("App resumed - fetching cached messages from node");
+        bluetoothManager->syncNextMessage();
+    } else if (!bluetoothManager->connected() && !bluetoothManager->connecting()
+               && bluetoothManager->hasSelection()) {
+        // Reconnecting starts a new session, which drains the queue too.
+        logMessage("App resumed and link is down - reconnecting");
+        bluetoothManager->connectToSelected();
+    }
+}
 
-    // Expose the C++ Bluetooth backend to QML as "BluetoothManager".
+// Ubuntu Touch exports GRID_UNIT_PX (typically 18-27 on a phone, 8 on a
+// desktop). All QML sizes are expressed as multiples of it so that text stays
+// readable on a high-DPI phone screen.
+static int gridUnitPx() {
+    bool ok = false;
+    const int px = qEnvironmentVariableIntValue("GRID_UNIT_PX", &ok);
+    return (ok && px > 0) ? px : 8;
+}
+
+// Makes the C++ backend and the grid unit available to QML.
+static BluetoothManager *exposeBackend(QQmlApplicationEngine &engine) {
     // Bluetooth is initialised lazily inside BluetoothManager - no
     // QBluetoothLocalDevice / D-Bus access at startup.
     // Owned by the engine, NOT a stack object: a stack object declared after
     // the engine is destroyed before it, and every QML binding then evaluates
     // against a null context property during shutdown.
-    BluetoothManager *bluetoothManager = new BluetoothManager(&engine);
+    auto *bluetoothManager = new BluetoothManager(&engine);
     qmlRegisterUncreatableType<DeviceListModel>(
         "ubMeshcore", 1, 0, "DeviceListModel",
         QStringLiteral("Provided by BluetoothManager.devicesModel"));
@@ -92,35 +107,36 @@ int main(int argc, char *argv[]) {
         QStringLiteral("Provided by BluetoothManager.contactsModel"));
     engine.rootContext()->setContextProperty("BluetoothManager", bluetoothManager);
     engine.rootContext()->setContextProperty("MessageStore", new MessageStore(&engine));
+    const int gridUnit = gridUnitPx();
+    engine.rootContext()->setContextProperty("gridUnitPx", gridUnit);
+    logMessage(QString("GRID_UNIT_PX = %1").arg(gridUnit));
+    return bluetoothManager;
+}
 
-    // Lomiri suspends background apps, which drops the BLE link. Reconnect to
-    // the last selected node as soon as the app is in the foreground again.
+int main(int argc, char *argv[]) {
+    // Force the Default Controls 2 style. The platform style brings its own
+    // palette, and controls without explicit colours then render dark text on
+    // a dark background.
+    qputenv("QT_QUICK_CONTROLS_STYLE", "Default");
+
+    // QT_QPA_PLATFORM, MIR_SOCKET and the Qt plugin paths are set by
+    // lomiri-app-launch for the running shell. Do not override them here -
+    // hard-coding them breaks the app on other OS versions/devices.
+
+    QGuiApplication app(argc, argv);
+    app.setApplicationName("ubMeshcore");
+    app.setOrganizationName("ubmeshcore");
+    logMessage("=== ubMeshcore starting ===");
+    installTranslators(app);
+
+    QQmlApplicationEngine engine;
+
+    BluetoothManager *bluetoothManager = exposeBackend(engine);
+
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, bluetoothManager,
                      [bluetoothManager](Qt::ApplicationState state) {
-        if (state != Qt::ApplicationActive)
-            return;
-        if (bluetoothManager->sessionReady()) {
-            // Still connected, but "message waiting" pushes that arrived while
-            // suspended were lost - fetch whatever the node cached meanwhile.
-            logMessage("App resumed - fetching cached messages from node");
-            bluetoothManager->syncNextMessage();
-        } else if (!bluetoothManager->connected() && !bluetoothManager->connecting()
-                   && bluetoothManager->hasSelection()) {
-            // Reconnecting starts a new session, which drains the queue too.
-            logMessage("App resumed and link is down - reconnecting");
-            bluetoothManager->connectToSelected();
-        }
-    });
-
-    // Ubuntu Touch exports GRID_UNIT_PX (typically 18-27 on a phone, 8 on a
-    // desktop). All QML sizes are expressed as multiples of it so that text
-    // stays readable on a high-DPI phone screen.
-    bool gridUnitOk = false;
-    int gridUnitPx = qEnvironmentVariableIntValue("GRID_UNIT_PX", &gridUnitOk);
-    if (!gridUnitOk || gridUnitPx <= 0)
-        gridUnitPx = 8;
-    engine.rootContext()->setContextProperty("gridUnitPx", gridUnitPx);
-    logMessage(QString("GRID_UNIT_PX = %1").arg(gridUnitPx));
+                         onAppStateChanged(bluetoothManager, state);
+                     });
 
     // Route QML load errors into our log too, not just stderr.
     QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app,

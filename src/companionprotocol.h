@@ -1,3 +1,5 @@
+// The MeshCore companion protocol: frame layouts, commands and parsed replies.
+
 #ifndef COMPANIONPROTOCOL_H
 #define COMPANIONPROTOCOL_H
 
@@ -37,6 +39,10 @@ struct MessagePath {
 ///
 /// Codes >= 0x80 are unsolicited pushes from the node, codes < 0x80 are
 /// replies to a command we sent.
+///
+/// The implementation is split by direction:
+///   companionprotocol.cpp     - commands sent to the node
+///   companionprotocol_rx.cpp  - frames from the node, message path correlation
 class CompanionProtocol : public QObject
 {
     Q_OBJECT
@@ -189,13 +195,21 @@ signals:
 
 private:
     void emitFrame(const QByteArray &frame);
+    void handleReply(quint8 code, const QByteArray &payload);
+    void handlePush(quint8 code, const QByteArray &payload);
+    void handleChannelInfo(const QByteArray &payload);
+    void handleDeviceInfo(const QByteArray &payload);
+    void handleChannelMessage(quint8 code, const QByteArray &payload);
+    void handleDirectMessage(const QByteArray &payload, int prefixOffset);
+    void handleContact(const QByteArray &payload, bool onNode);
+    void handleSent(const QByteArray &payload);
+    void handleError(const QByteArray &payload);
     /// Pulls the trailing printable run out of a payload. The exact offset of
     /// the text field differs between firmware revisions, so this is
     /// deliberately tolerant - the raw hex is logged alongside it.
     static QString trailingText(const QByteArray &payload, int minLength = 1);
     /// Parses the RESP_CODE_CONTACT / PUSH_NEW_ADVERT body.
     static bool parseContact(const QByteArray &payload, MeshContact *out);
-    void handleDirectMessage(const QByteArray &payload, int prefixOffset);
 
     // --- message path correlation -------------------------------------------
     /// A group-text packet (payload type GRP_TXT) seen in the RX log.
@@ -210,15 +224,18 @@ private:
         int rssi = 0;
         bool used = false;
     };
+    /// How long an RX log packet can still be matched to a message.
+    static constexpr qint64 kRxLogKeepMs = 30000;
+    void handleRxLog(const QByteArray &payload);
     void recordRxLog(const QByteArray &payload);
     /// Builds the path for a channel message, consuming the matching RX log
     /// entry if there is one.
     MessagePath resolvePath(int channelIdx, quint8 pathLenByte, int textBytes);
+    /// Index of the RX log packet that best matches a channel message, or -1.
+    int findRxPacket(int channelIdx, quint8 pathLenByte, int textBytes) const;
 
     QVector<RxGroupPacket> m_rxGroupPackets;    // last few seconds only
     QHash<int, quint8> m_channelHashes;         // channel idx -> wire hash
-
-    int m_pendingChannelQuery = -1;
 };
 
 #endif // COMPANIONPROTOCOL_H

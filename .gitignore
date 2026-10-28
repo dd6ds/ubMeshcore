@@ -2,11 +2,6 @@
 build/
 *.click
 
-# Rust (src/rust/target is ~145 MB - the repo-root rule "/target" does not
-# match nested target directories)
-src/rust/target/
-**/target/
-
 # CMake leftovers if someone configures in-tree
 CMakeCache.txt
 CMakeFiles/
@@ -25,9 +20,6 @@ ui_*.h
 # Runtime / debug artefacts
 app.log
 *.log
-
-# Superseded, kept only for reference
-BluetoothManager.qml.obsolete
 
 # Editors & OS
 .vscode/

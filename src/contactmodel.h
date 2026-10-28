@@ -1,3 +1,5 @@
+// The node's contact table as a list model for QML, with favourites.
+
 #ifndef CONTACTMODEL_H
 #define CONTACTMODEL_H
 

@@ -1,14 +1,18 @@
 <RCC>
   <qresource prefix="/">
     <file>qml/main.qml</file>
+    <file>qml/DevicesPage.qml</file>
+    <file>qml/ConnectionPage.qml</file>
+    <file>qml/ChannelsPage.qml</file>
+    <file>qml/ChannelPage.qml</file>
+    <file>qml/ContactsPage.qml</file>
+    <file>qml/ContactList.qml</file>
+    <file>qml/ContactFilterBar.qml</file>
+    <file>qml/ContactRow.qml</file>
+    <file>qml/DirectChat.qml</file>
+    <file>qml/RepeaterAdmin.qml</file>
     <file>qml/AppLabel.qml</file>
     <file>qml/AppField.qml</file>
-    <file>qml/ContactList.qml</file>
-    <file>qml/RepeaterAdmin.qml</file>
     <file>qml/UnreadBadge.qml</file>
-    <file>qml/DirectChat.qml</file>
-    <file>qml/NodeManager.qml</file>
-    <file>qml/MessageView.qml</file>
-    <file>qml/SettingsView.qml</file>
   </qresource>
 </RCC>
