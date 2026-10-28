@@ -40,6 +40,10 @@ DE = {
     "Could not open UART service": "UART-Dienst konnte nicht geöffnet werden",
     "Reading UART characteristics...": "UART-Merkmale werden gelesen...",
     "UART characteristics missing": "UART-Merkmale fehlen",
+    "The node did not answer. It is probably not paired with this phone yet - "
+    "see \"Pairing\" in the README.":
+        "Der Node antwortet nicht. Vermutlich ist er noch nicht mit diesem Telefon "
+        "gekoppelt - siehe \"Pairing\" in der README.",
     "UART ready - starting session...": "UART bereit - Sitzung wird gestartet...",
     "Not connected to a node": "Mit keinem Node verbunden",
     "Node session not started yet": "Node-Sitzung noch nicht gestartet",

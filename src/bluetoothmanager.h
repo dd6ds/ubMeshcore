@@ -212,6 +212,7 @@ private:
     void onControllerError(QLowEnergyController::Error error);
     void onServiceDiscoveryFinished();
     void onServiceStateChanged(QLowEnergyService::ServiceState state);
+    void onDetailsTimeout();
     void onCharacteristicChanged(const QLowEnergyCharacteristic &characteristic,
                                  const QByteArray &value);
     void onServiceError(QLowEnergyService::ServiceError error);
@@ -266,6 +267,10 @@ private:
     QLowEnergyController *m_controller = nullptr;
     QLowEnergyService *m_uartService = nullptr;
     QLowEnergyCharacteristic m_rxCharacteristic;   // phone -> node (write)
+    /// Reading the UART characteristics normally takes a second or two. An
+    /// unpaired node stalls it until the link drops, see onDetailsTimeout().
+    QTimer m_detailsTimeout;
+    static constexpr int kDetailsTimeoutMs = 15000;
     bool m_triedRandomAddress = false;
     bool m_connected = false;
     bool m_connecting = false;

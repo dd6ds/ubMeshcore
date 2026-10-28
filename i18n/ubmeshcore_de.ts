@@ -43,7 +43,7 @@
         <translation>Keine Antwort vom Node - Advert wurde evtl. nicht gesendet</translation>
     </message>
     <message>
-        <location filename="../src/bluetoothmanager.cpp" line="+66" />
+        <location filename="../src/bluetoothmanager.cpp" line="+70" />
         <source>Checking Bluetooth...</source>
         <translation>Bluetooth wird geprüft...</translation>
     </message>
@@ -133,24 +133,29 @@
         <translation>Verbinde...</translation>
     </message>
     <message>
-        <location line="+44" />
+        <location line="+45" />
         <source>Connected - discovering services...</source>
         <translation>Verbunden - Dienste werden gesucht...</translation>
     </message>
     <message>
-        <location line="+28" />
+        <location line="+29" />
         <source>Connection lost before the node confirmed the advert</source>
         <translation>Verbindung getrennt, bevor der Node das Advert bestätigt hat</translation>
     </message>
     <message>
-        <location line="-35" />
-        <location line="+42" />
-        <location line="+124" />
+        <location line="+119" />
+        <source>The node did not answer. It is probably not paired with this phone yet - see "Pairing" in the README.</source>
+        <translation>Der Node antwortet nicht. Vermutlich ist er noch nicht mit diesem Telefon gekoppelt - siehe "Pairing" in der README.</translation>
+    </message>
+    <message>
+        <location line="-155" />
+        <location line="+43" />
+        <location line="+141" />
         <source>Not connected</source>
         <translation>Nicht verbunden</translation>
     </message>
     <message>
-        <location line="-87" />
+        <location line="-104" />
         <source>Connected, but no Nordic UART service</source>
         <translation>Verbunden, aber kein Nordic-UART-Dienst</translation>
     </message>
@@ -165,7 +170,7 @@
         <translation>UART-Merkmale werden gelesen...</translation>
     </message>
     <message>
-        <location line="+14" />
+        <location line="+16" />
         <source>UART characteristics missing</source>
         <translation>UART-Merkmale fehlen</translation>
     </message>
@@ -187,12 +192,12 @@
         <translation>Node-Sitzung noch nicht gestartet</translation>
     </message>
     <message>
-        <location filename="../src/bluetoothmanager.cpp" line="+17" />
+        <location filename="../src/bluetoothmanager.cpp" line="+32" />
         <source>Could not enable notifications</source>
         <translation>Benachrichtigungen konnten nicht aktiviert werden</translation>
     </message>
     <message>
-        <location line="-77" />
+        <location line="-94" />
         <source>Connection failed: </source>
         <translation>Verbindung fehlgeschlagen: </translation>
     </message>

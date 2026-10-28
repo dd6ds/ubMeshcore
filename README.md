@@ -151,6 +151,28 @@ later builds start in seconds.
 | Heltec V4 | Companion | yes |
 | SenseCAP Solar P1 Pro | Repeater | yes — management only restricted (TODO) |
 | Xiaomi Poco X3 NFC | Client | yes |
+| Xiaomi Poco X3 Pro | Client | yes — after pairing with `bluetoothctl` |
+
+## Pairing
+
+The MeshCore companion firmware only talks to a phone it is paired with. The
+Ubuntu Touch Bluetooth settings do not ask for the node's PIN, so pair once
+from a shell on the phone (`adb shell` or the Terminal app):
+
+```bash
+bluetoothctl
+agent KeyboardDisplay
+default-agent
+scan le                  # wait until the node shows up, then
+scan off
+pair <node MAC>          # enter the PIN shown on the node's display
+trust <node MAC>         # (123456 on nodes without a display, unless changed)
+disconnect <node MAC>
+quit
+```
+
+Without a pairing the app stops at *Reading UART characteristics...* and,
+after 15 seconds, says the node is probably not paired.
 
 ## Build and install
 

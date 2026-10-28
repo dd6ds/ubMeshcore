@@ -54,6 +54,10 @@ BluetoothManager::BluetoothManager(QObject *parent)
     m_writeTimer.setInterval(kWriteGapMs);
     connect(&m_writeTimer, &QTimer::timeout, this, &BluetoothManager::flushWriteQueue);
 
+    m_detailsTimeout.setSingleShot(true);
+    m_detailsTimeout.setInterval(kDetailsTimeoutMs);
+    connect(&m_detailsTimeout, &QTimer::timeout, this, &BluetoothManager::onDetailsTimeout);
+
     connectCompanionSignals();
     setupSessionTimers();
 
@@ -421,6 +425,7 @@ void BluetoothManager::startController(const QBluetoothDeviceInfo &info,
 
 void BluetoothManager::teardownConnection()
 {
+    m_detailsTimeout.stop();
     m_rxCharacteristic = QLowEnergyCharacteristic();
 
     if (m_uartService) {
@@ -465,6 +470,7 @@ void BluetoothManager::onControllerConnected()
 void BluetoothManager::onControllerDisconnected()
 {
     qDebug() << "BluetoothManager: disconnected";
+    m_detailsTimeout.stop();
     m_rxCharacteristic = QLowEnergyCharacteristic();
     if (m_uartService) {
         m_uartService->deleteLater();
@@ -549,6 +555,7 @@ void BluetoothManager::onServiceDiscoveryFinished()
 
     setConnectionState(tr("Reading UART characteristics..."));
     emit connectionChanged();
+    m_detailsTimeout.start();
     m_uartService->discoverDetails();
 }
 
@@ -556,6 +563,7 @@ void BluetoothManager::onServiceStateChanged(QLowEnergyService::ServiceState sta
 {
     if (state != QLowEnergyService::ServiceDiscovered)
         return;
+    m_detailsTimeout.stop();
 
     m_rxCharacteristic = m_uartService->characteristic(kNusRxChar);
     const QLowEnergyCharacteristic tx = m_uartService->characteristic(kNusTxChar);
@@ -588,6 +596,21 @@ void BluetoothManager::onServiceStateChanged(QLowEnergyService::ServiceState sta
         if (m_uartReady)
             m_companion.sendAppStart(QStringLiteral("ubMeshcore"));
     });
+}
+
+// MeshCore companion firmware only lets a bonded phone read the UART
+// characteristics. Without a bond, Qt waits for an encryption change that
+// never comes ("Encryption change event blocking further GATT requests")
+// until the link drops after about 30 s. The system Bluetooth settings do not
+// ask for the node's PIN, so the user has to pair once with bluetoothctl.
+void BluetoothManager::onDetailsTimeout()
+{
+    qWarning() << "BluetoothManager: no answer while reading UART characteristics"
+               << "- node probably not paired";
+    teardownConnection();
+    setConnectionState(tr("The node did not answer. It is probably not paired with this "
+                          "phone yet - see \"Pairing\" in the README."));
+    emit connectionChanged();
 }
 
 void BluetoothManager::onServiceError(QLowEnergyService::ServiceError error)
