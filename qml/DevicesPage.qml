@@ -43,7 +43,7 @@ Page {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
-            color: "#666"
+            color: app.colorSecondaryText
         }
 
         AppLabel {
@@ -53,7 +53,7 @@ Page {
             font.pixelSize: app.fontSecondary
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            color: "#666"
+            color: app.colorSecondaryText
         }
 
         ListView {
@@ -71,10 +71,10 @@ Page {
                 height: Math.round(app.gu * 8)
                 radius: Math.round(app.gu * 0.5)
                 color: rowMouse.pressed
-                       ? "#b0d4ff"
-                       : (model.isMeshCore ? "#e6f4ea" : "#f0f0f0")
-                border.color: selected ? "#0078d7"
-                                       : (model.isMeshCore ? "#2e7d32" : "#cccccc")
+                       ? app.colorSurfacePressed
+                       : (model.isMeshCore ? app.colorSuccessBackground : app.colorSurface)
+                border.color: selected ? app.colorAccent
+                                       : (model.isMeshCore ? app.colorSuccess : app.colorBorder)
                 border.width: selected ? 3 : 1
 
                 Column {
@@ -89,7 +89,7 @@ Page {
                         font.bold: model.hasName
                         font.italic: !model.hasName
                         font.pixelSize: app.fontBody
-                        color: model.hasName ? "#000" : "#888"
+                        color: model.hasName ? app.colorText : app.colorSecondaryText
                         elide: Text.ElideRight
                         width: parent.width
                     }
@@ -97,7 +97,7 @@ Page {
                         text: model.address
                               + (model.lowEnergy ? "  ·  BLE" : "  ·  " + qsTr("Classic"))
                               + (model.rssi !== 0 ? "  ·  " + model.rssi + " dBm" : "")
-                        color: "#555"
+                        color: app.colorSecondaryText
                         font.pixelSize: app.fontSecondary
                         elide: Text.ElideRight
                         width: parent.width
@@ -113,6 +113,11 @@ Page {
                     }
                 }
             }
+        }
+
+        AppearanceChoice {
+            app: page.app
+            Layout.fillWidth: true
         }
     }
 }

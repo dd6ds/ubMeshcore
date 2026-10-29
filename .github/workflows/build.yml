@@ -1,0 +1,96 @@
+# Builds the arm64 click package and, for a version tag or on request,
+# publishes it as a GitHub release. See README, "Releases".
+name: Build click
+
+on:
+  # Start by hand: GitHub -> Actions -> "Build click" -> "Run workflow".
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish the result as a GitHub release"
+        type: boolean
+        default: false
+  # Pushing a tag such as v0.2.2 builds and publishes a release.
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write          # needed to create releases
+
+concurrency:
+  group: build-click-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(python3 -c 'import json; print(json.load(open("manifest.json"))["version"])')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # A release tag has to match the version inside the package.
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$VERSION" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match manifest.json version $VERSION"
+            exit 1
+          fi
+
+      # Clickable builds in its Docker image (Ubuntu Touch SDK 20.04, arm64),
+      # the same way as "clickable build" locally.
+      - name: Install clickable
+        run: |
+          pipx install clickable-ut
+          clickable --version
+
+      - name: Build click (arm64)
+        run: clickable build --arch arm64 --non-interactive
+
+      - name: Collect click
+        run: |
+          mkdir -p dist
+          cp build/aarch64-linux-gnu/app/*.click dist/
+          (cd dist && sha256sum *.click > SHA256SUMS)
+          ls -lh dist
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubmeshcore-${{ steps.version.outputs.version }}-arm64
+          path: dist/
+          retention-days: 30
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            PRERELEASE=""
+          else
+            TAG="build-$(date -u +%Y%m%d-%H%M)"
+            PRERELEASE="--prerelease"
+          fi
+          cat > notes.md <<NOTES
+          ubMeshcore ${{ steps.version.outputs.version }} for Ubuntu Touch (arm64), built from commit ${GITHUB_SHA::7}.
+
+          **Install** (phone on USB, developer mode on):
+          \`\`\`bash
+          adb push ubmeshcore_*_arm64.click /home/phablet/Downloads/
+          adb shell pkcon install-local --allow-untrusted /home/phablet/Downloads/ubmeshcore_*_arm64.click
+          \`\`\`
+          Or open the .click file on the phone with the OpenStore app.
+
+          Before the first connection the node has to be paired with the phone,
+          see "Pairing" in the README.
+          NOTES
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ubMeshcore $TAG" \
+            --notes-file notes.md \
+            $PRERELEASE

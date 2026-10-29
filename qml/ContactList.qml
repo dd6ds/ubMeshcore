@@ -37,6 +37,7 @@ Item {
                 || (keyPrefix || "").toLowerCase().indexOf(q) !== -1
     }
 
+    // Border colour of a contact card; saturated enough for both themes.
     function typeColor(type) {
         if (type === "repeater") return "#d32f2f"
         if (type === "room") return "#7b1fa2"
@@ -71,7 +72,8 @@ Item {
         stack.push(chatComponent, { app: root.app, keyHex: keyHex, contactName: contactName })
     }
     function openAdmin(keyHex, nodeName, nodeType) {
-        stack.push(adminComponent, { keyHex: keyHex, nodeName: nodeName, nodeType: nodeType })
+        stack.push(adminComponent, { app: root.app, keyHex: keyHex, nodeName: nodeName,
+                                     nodeType: nodeType })
     }
 
     Component {
@@ -258,8 +260,8 @@ Item {
                 visible: root.selectMode
                 implicitHeight: selectRow.implicitHeight + Math.round(root.gu * 1.0)
                 radius: 4
-                color: "#fff8e1"
-                border.color: "#ffb300"
+                color: root.app.colorWarningBackground
+                border.color: root.app.colorWarningBorder
                 RowLayout {
                     id: selectRow
                     anchors.fill: parent
@@ -324,15 +326,15 @@ Item {
                 visible: root.lastError.length > 0
                 implicitHeight: contactErrorLabel.implicitHeight + Math.round(root.gu * 1.0)
                 radius: 4
-                color: "#ffebee"
-                border.color: "#e57373"
+                color: root.app.colorErrorBackground
+                border.color: root.app.colorErrorBorder
                 AppLabel {
                     id: contactErrorLabel
                     anchors.fill: parent
                     anchors.margins: Math.round(root.gu * 0.5)
                     wrapMode: Text.Wrap
                     font.pixelSize: root.fontSecondary
-                    color: "#b71c1c"
+                    color: root.app.colorError
                     text: root.lastError
                 }
                 MouseArea {
@@ -348,15 +350,18 @@ Item {
                 visible: BluetoothManager.lastAdvertInfo.length > 0
                 implicitHeight: advertLabel.implicitHeight + Math.round(root.gu * 1.0)
                 radius: 4
-                color: BluetoothManager.lastAdvertOk ? "#e8f5e9" : "#ffebee"
-                border.color: BluetoothManager.lastAdvertOk ? "#81c784" : "#e57373"
+                color: BluetoothManager.lastAdvertOk ? root.app.colorSuccessBackground
+                                                     : root.app.colorErrorBackground
+                border.color: BluetoothManager.lastAdvertOk ? root.app.colorSuccessBorder
+                                                            : root.app.colorErrorBorder
                 AppLabel {
                     id: advertLabel
                     anchors.fill: parent
                     anchors.margins: Math.round(root.gu * 0.5)
                     wrapMode: Text.Wrap
                     font.pixelSize: root.fontSecondary
-                    color: BluetoothManager.lastAdvertOk ? "#1b5e20" : "#b71c1c"
+                    color: BluetoothManager.lastAdvertOk ? root.app.colorSuccess
+                                                         : root.app.colorError
                     text: BluetoothManager.lastAdvertInfo
                           + (BluetoothManager.lastAdvertInfo.indexOf("✓") === 0
                              ? qsTr(" - nodes and repeaters in range will list you "
@@ -382,7 +387,7 @@ Item {
                     width: parent.width * 0.85
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    color: "#888"
+                    color: root.app.colorSecondaryText
                     font.pixelSize: root.fontSecondary
                     visible: (contactList.count === 0 && BluetoothManager.sessionReady
                               && !BluetoothManager.contactsSyncing)

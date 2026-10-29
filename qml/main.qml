@@ -4,20 +4,19 @@ import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.12
 import QtQuick.Window 2.12
+import Qt.labs.settings 1.0
 
 // Application window. Holds the state that several pages share (message
-// history, unread counters, the open channel) and the page stack. The pages
-// themselves live in their own files and get this window as `app`.
+// history, unread counters, the open channel, the colours) and the page
+// stack. The pages themselves live in their own files and get this window as
+// `app`.
 ApplicationWindow {
     id: rootWindow
     visible: true
     width: Screen.width
     height: Screen.height
     title: "ubMeshcore"
-
-    // Pin the background instead of inheriting the platform palette, so the
-    // explicit dark text colours always have the contrast they assume.
-    color: "#ffffff"
+    color: colorBackground
 
     // --- Scaling -----------------------------------------------------------
     // gridUnitPx comes from main.cpp (Ubuntu Touch's GRID_UNIT_PX). Everything
@@ -30,6 +29,61 @@ ApplicationWindow {
 
     // Propagates to every control and Label that does not override it.
     font.pixelSize: fontBody
+
+    // --- Colours -----------------------------------------------------------
+    // settings.themeMode: "system" follows the phone's Lomiri theme, "light"
+    // and "dark" are fixed. Every colour in the app comes from here; the
+    // palette below hands them to the stock controls (buttons, menus, dialogs).
+    readonly property bool darkMode: settings.themeMode === "dark"
+                                     || (settings.themeMode === "system" && SystemTheme.dark)
+    readonly property color colorBackground:      darkMode ? "#121212" : "#ffffff"
+    readonly property color colorSurface:         darkMode ? "#1f2326" : "#f0f0f0"
+    readonly property color colorSurfacePressed:  darkMode ? "#2d4a66" : "#b0d4ff"
+    readonly property color colorSelected:        darkMode ? "#1d3550" : "#e6f0ff"
+    readonly property color colorFieldBackground: darkMode ? "#262a2d" : "#ffffff"
+    readonly property color colorText:            darkMode ? "#eeeeee" : "#111111"
+    readonly property color colorSecondaryText:   darkMode ? "#a8a8a8" : "#666666"
+    readonly property color colorPlaceholder:     darkMode ? "#777777" : "#999999"
+    readonly property color colorBorder:          darkMode ? "#4a4f53" : "#cccccc"
+    readonly property color colorAccent:          darkMode ? "#4aa3f0" : "#0078d7"
+    readonly property color colorOwnName:         darkMode ? "#7cb8f5" : "#0050a0"
+    readonly property color colorSuccess:         darkMode ? "#66bb6a" : "#2e7d32"
+    readonly property color colorWarning:         darkMode ? "#ffa726" : "#e65100"
+    readonly property color colorError:           darkMode ? "#ef5350" : "#c62828"
+    readonly property color colorFavorite:        darkMode ? "#fbc02d" : "#f9a825"
+    readonly property color colorInactive:        darkMode ? "#757575" : "#9e9e9e"
+    readonly property color colorBubbleOwn:       darkMode ? "#1d3550" : "#dcebfb"
+    readonly property color colorMarked:          darkMode ? "#4a3420" : "#ffe0b2"
+    // Tinted boxes for success, warning and error notes.
+    readonly property color colorSuccessBackground: darkMode ? "#1b3320" : "#e8f5e9"
+    readonly property color colorSuccessBorder:     darkMode ? "#388e3c" : "#81c784"
+    readonly property color colorWarningBackground: darkMode ? "#3a2e14" : "#fff3e0"
+    readonly property color colorWarningBorder:     "#f57c00"
+    readonly property color colorErrorBackground:   darkMode ? "#3a1d1f" : "#ffebee"
+    readonly property color colorErrorBorder:       darkMode ? "#c62828" : "#e57373"
+    readonly property color colorErrorPressed:      darkMode ? "#5a2a2d" : "#ffcdd2"
+
+    palette.window: colorBackground
+    palette.windowText: colorText
+    palette.base: colorFieldBackground
+    palette.alternateBase: colorSurface
+    palette.text: colorText
+    palette.button: colorSurface
+    palette.buttonText: colorText
+    palette.brightText: "#ffffff"
+    palette.highlight: colorAccent
+    palette.highlightedText: "#ffffff"
+    palette.light: darkMode ? "#2c3134" : "#f5f5f5"
+    palette.midlight: darkMode ? "#33383b" : "#e0e0e0"
+    palette.mid: colorBorder
+    palette.dark: darkMode ? "#5c6266" : "#9e9e9e"
+    palette.shadow: "#000000"
+
+    Settings {
+        id: settings
+        property string themeMode: "system"
+    }
+    property alias settings: settings
 
     // --- Navigation --------------------------------------------------------
     // Position of each page in mainStack below.
@@ -200,7 +254,8 @@ ApplicationWindow {
 
     function batteryColor() {
         var p = BluetoothManager.batteryPercent
-        return p < 0 ? "#555" : p <= 15 ? "#b00" : p <= 35 ? "#e65100" : "#2e7d32"
+        return p < 0 ? colorSecondaryText : p <= 15 ? colorError
+                     : p <= 35 ? colorWarning : colorSuccess
     }
 
     // --- Events from the node ----------------------------------------------

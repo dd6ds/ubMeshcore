@@ -45,6 +45,8 @@ add_executable(ubmeshcore
     src/devicelistmodel.h
     src/messagestore.cpp
     src/messagestore.h
+    src/systemtheme.cpp
+    src/systemtheme.h
     qml.qrc
     ${UBMESHCORE_I18N_QRC})
 add_dependencies(ubmeshcore ubmeshcore_translations)

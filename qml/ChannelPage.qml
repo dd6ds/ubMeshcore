@@ -97,14 +97,14 @@ Page {
                             + (BluetoothManager.batteryPercent >= 0
                                ? "  🔋 " + BluetoothManager.batteryPercent + "%" : "")
                           : qsTr("no node session")
-                    color: BluetoothManager.sessionReady ? "#2e7d32" : "#b00"
+                    color: BluetoothManager.sessionReady ? app.colorSuccess : app.colorError
                     font.pixelSize: app.fontSecondary
                 }
                 AppLabel {
                     Layout.fillWidth: true
                     visible: BluetoothManager.lastSyncInfo.length > 0
                     text: "↓ " + BluetoothManager.lastSyncInfo
-                    color: "#0078d7"
+                    color: app.colorAccent
                     font.pixelSize: app.fontSecondary
                     elide: Text.ElideRight
                 }
@@ -148,7 +148,7 @@ Page {
                 anchors.centerIn: parent
                 visible: messageView.contentHeight < 1
                 text: qsTr("No messages in this channel yet")
-                color: "#888"
+                color: app.colorSecondaryText
                 font.pixelSize: app.fontSecondary
             }
 
@@ -172,7 +172,7 @@ Page {
                     anchors.fill: parent
                     z: -1
                     color: messageMouse.pressed && messageDelegate.replyable
-                           ? "#e3edf9" : "transparent"
+                           ? app.colorSelected : "transparent"
                 }
 
                 Column {
@@ -185,14 +185,14 @@ Page {
                         wrapMode: Text.Wrap
                         textFormat: Text.PlainText
                         text: model.sender + ": " + model.text
-                        color: model.sender === "!" ? "#b00"
-                             : model.sender === "You" ? "#0050a0" : "#111111"
+                        color: model.sender === "!" ? app.colorError
+                             : model.sender === "You" ? app.colorOwnName : app.colorText
                     }
                     AppLabel {
                         width: parent.width
                         // "08:31  ·  ↳ 2 hops · 2a67 › 6228"
                         text: model.time + (model.route.length ? "  ·  ↳ " + model.route : "")
-                        color: "#666"
+                        color: app.colorSecondaryText
                         font.pixelSize: app.fontSecondary
                         elide: Text.ElideRight
                     }
@@ -201,8 +201,8 @@ Page {
                         visible: messageDelegate.expanded
                         width: parent.width
                         height: visible ? pathText.implicitHeight + Math.round(app.gu * 1.0) : 0
-                        color: "#f2f6fb"
-                        border.color: "#c5d6ea"
+                        color: app.colorSelected
+                        border.color: app.colorBorder
                         radius: 4
                         AppLabel {
                             id: pathText
