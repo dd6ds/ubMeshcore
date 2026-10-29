@@ -218,7 +218,30 @@ void BluetoothManager::onContactMessage(const QByteArray &prefix, quint8 txtType
         return;
     }
     ++m_drainCount;
+    if (m_holdDirectMessages) {
+        m_heldDirectMessages.append({ prefix, text, ts });
+        return;
+    }
+    emitDirectMessage(prefix, text, ts);
+}
+
+void BluetoothManager::emitDirectMessage(const QByteArray &prefix, const QString &text,
+                                         quint32 ts)
+{
+    const QString key = keyHexForPrefix(prefix);
     emit directMessage(key, m_contacts.nameForKey(key), text, double(plausibleSendTime(ts)));
+}
+
+// Hands on the DMs that arrived while the contact table was reloading, now
+// that they can be matched to their contacts. Also called on disconnect, so
+// none are lost (they keep the bare prefix if still unmatched).
+void BluetoothManager::releaseHeldDirectMessages()
+{
+    m_holdDirectMessages = false;
+    const QVector<HeldDirectMessage> held = m_heldDirectMessages;
+    m_heldDirectMessages.clear();
+    for (const HeldDirectMessage &dm : held)
+        emitDirectMessage(dm.prefix, dm.text, dm.ts);
 }
 
 // RESP_SENT does not say which command it answers, but the node answers in
@@ -297,6 +320,7 @@ void BluetoothManager::onContactsSyncFinished(quint32 lastMod)
         m_contactsLastMod = lastMod;
     m_contactsSyncing = false;
     emit contactsSyncingChanged();
+    releaseHeldDirectMessages();
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +581,9 @@ void BluetoothManager::refreshContacts()
         return;
     m_contactsLastMod = 0;
     m_contacts.clearContacts();
+    // The table is empty until END_OF_CONTACTS; DMs arriving meanwhile (the
+    // node's cached ones right after connecting) wait for it.
+    m_holdDirectMessages = true;
     m_companion.requestContacts(0);
 }
 

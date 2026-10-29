@@ -135,7 +135,7 @@ Page {
                 property string lastError: ""
                 Layout.fillWidth: true
                 visible: text.length > 0
-                color: "#b00"
+                color: app.colorError
                 wrapMode: Text.Wrap
                 font.pixelSize: app.fontSecondary
             }
@@ -154,7 +154,7 @@ Page {
                               .arg(BluetoothManager.maxChannels)
                             : qsTr("Channels on %1:").arg(BluetoothManager.nodeName)
                 }
-                color: "#666"
+                color: app.colorSecondaryText
                 font.pixelSize: app.fontSecondary
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -175,8 +175,9 @@ Page {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.round(app.gu * 7)
                     radius: Math.round(app.gu * 0.5)
-                    color: channelMouse.pressed ? "#b0d4ff" : (current ? "#e6f0ff" : "#f0f0f0")
-                    border.color: current ? "#0078d7" : "#cccccc"
+                    color: channelMouse.pressed ? app.colorSurfacePressed
+                                                : (current ? app.colorSelected : app.colorSurface)
+                    border.color: current ? app.colorAccent : app.colorBorder
                     border.width: current ? 3 : 1
 
                     Column {
@@ -197,7 +198,7 @@ Page {
                             text: app.unreadFor(index) === 1
                                   ? qsTr("1 new message")
                                   : qsTr("%1 new messages").arg(app.unreadFor(index))
-                            color: "#d32f2f"
+                            color: app.colorError
                             font.pixelSize: app.fontSecondary
                         }
                     }
@@ -221,13 +222,13 @@ Page {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.right: parent.right
                         anchors.rightMargin: app.spacingUnit
-                        color: removeMouse.pressed ? "#ffcdd2" : "transparent"
-                        border.color: "#e57373"
+                        color: removeMouse.pressed ? app.colorErrorPressed : "transparent"
+                        border.color: app.colorErrorBorder
                         border.width: 1
                         Text {
                             anchors.centerIn: parent
                             text: "✕"
-                            color: "#c62828"
+                            color: app.colorError
                             font.pixelSize: Math.round(app.gu * 2)
                         }
                         MouseArea {

@@ -13,6 +13,11 @@ import sys
 import xml.etree.ElementTree as ET
 
 DE = {
+    # --- appearance ----------------------------------------------------------
+    "Appearance": "Darstellung",
+    "Like the phone": "Wie das Telefon",
+    "Light": "Hell",
+    "Dark": "Dunkel",
     # --- connection / Bluetooth -------------------------------------------
     "Session started": "Sitzung gestartet",
     "Session started - ": "Sitzung gestartet - ",

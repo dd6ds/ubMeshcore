@@ -92,7 +92,11 @@ public:
         // rest of this enum would suggest.
         RespContactMsgRecv3 = 0x10,
         RespChannelMsgRecv2 = 0x11,
-        RespChannelInfo     = 0x12
+        RespChannelInfo     = 0x12,
+        // A binary datagram on a channel (image chunks, app data - not text).
+        // Firmware 1.15+ queues it with the messages, so it answers
+        // SYNC_NEXT_MESSAGE like one.
+        RespChannelDataRecv = 0x1B
     };
 
     enum Push : quint8 {
@@ -204,6 +208,9 @@ private:
     void handleContact(const QByteArray &payload, bool onNode);
     void handleSent(const QByteArray &payload);
     void handleError(const QByteArray &payload);
+    /// The node answered one SYNC_NEXT_MESSAGE with a queued item; ask for
+    /// the next one so the drain runs on until NO_MORE_MESSAGES.
+    void continueDrain();
     /// Pulls the trailing printable run out of a payload. The exact offset of
     /// the text field differs between firmware revisions, so this is
     /// deliberately tolerant - the raw hex is logged alongside it.
@@ -236,6 +243,10 @@ private:
 
     QVector<RxGroupPacket> m_rxGroupPackets;    // last few seconds only
     QHash<int, quint8> m_channelHashes;         // channel idx -> wire hash
+    /// SYNC_NEXT_MESSAGE requests not answered yet. A reply the app does not
+    /// know arriving while one is open is a queued item of a newer type; the
+    /// drain must go past it instead of stopping there.
+    int m_syncsInFlight = 0;
 };
 
 #endif // COMPANIONPROTOCOL_H

@@ -24,7 +24,9 @@ Item {
         width: parent.width
         height: Math.round(list.gu * 7.5)
         radius: Math.round(list.gu * 0.5)
-        color: row.isSelected ? "#ffe0b2" : (tap.pressed ? "#d6e8ff" : "#f5f5f5")
+        color: row.isSelected ? list.app.colorMarked
+                              : tap.pressed ? list.app.colorSurfacePressed
+                              : list.app.colorSurface
         border.color: list.typeColor(contact.type)
         border.width: 2
         opacity: contact.isActive ? 1.0 : 0.6
@@ -41,9 +43,9 @@ Item {
                 Layout.preferredWidth: Math.round(list.gu * 2.6)
                 Layout.preferredHeight: Layout.preferredWidth
                 radius: 4
-                border.color: "#e65100"
+                border.color: list.app.colorWarning
                 border.width: 2
-                color: row.isSelected ? "#e65100" : "white"
+                color: row.isSelected ? list.app.colorWarning : list.app.colorFieldBackground
                 Text {
                     anchors.centerIn: parent
                     visible: row.isSelected
@@ -59,7 +61,7 @@ Item {
                 Layout.preferredWidth: Math.round(list.gu * 1.2)
                 Layout.preferredHeight: Layout.preferredWidth
                 radius: width / 2
-                color: contact.isActive ? "#2e7d32" : "#9e9e9e"
+                color: contact.isActive ? list.app.colorSuccess : list.app.colorInactive
             }
 
             ColumnLayout {
@@ -79,7 +81,7 @@ Item {
                           + (contact.onNode ? "" : "  ·  " + qsTr("not on node"))
                     // Orange: heard, but not in the node's table - direct
                     // messages save it there first.
-                    color: contact.onNode ? "#555" : "#e65100"
+                    color: contact.onNode ? list.app.colorSecondaryText : list.app.colorWarning
                     font.pixelSize: list.fontSecondary
                     elide: Text.ElideRight
                 }
@@ -102,7 +104,7 @@ Item {
             // opening the contact.
             AppLabel {
                 text: contact.isFavorite ? "★" : "☆"
-                color: contact.isFavorite ? "#f9a825" : "#9e9e9e"
+                color: contact.isFavorite ? list.app.colorFavorite : list.app.colorInactive
                 font.pixelSize: Math.round(list.gu * 2.6)
                 Layout.preferredWidth: Math.round(list.gu * 3.5)
                 horizontalAlignment: Text.AlignHCenter

@@ -68,6 +68,9 @@ the mesh.
   English.
 - **Auto-reconnect** — Lomiri suspends background apps, which drops the BLE
   link; the app reconnects to the last node when it is in the foreground again.
+- **Dark mode** — *Appearance* on the first page: *Like the phone* follows
+  the Lomiri theme (and switches along when it changes), or pick *Light* /
+  *Dark* fixed.
 
 ## Status
 
@@ -200,6 +203,24 @@ clickable logs       # follow the app's output
 > adb shell pkill -9 ubmeshcore; clickable install && clickable launch
 > ```
 
+## Releases
+
+`.github/workflows/build.yml` builds the arm64 click package on GitHub Actions
+and attaches it, with a `SHA256SUMS` file, to a GitHub release:
+
+1. Raise `version` in `manifest.json` and commit.
+2. Tag that commit with the same version and push the tag:
+
+   ```bash
+   git tag v0.2.2
+   git push origin main v0.2.2
+   ```
+
+The workflow refuses a tag that does not match `manifest.json`. Without a tag,
+*Actions → Build click → Run workflow* builds the package as a downloadable
+workflow artifact; ticking *Publish the result as a GitHub release* turns it
+into a pre-release named `build-<date>`.
+
 ## Layout
 
 ```
@@ -219,8 +240,9 @@ src/devicelistmodel.*     List model of scanned Bluetooth devices
 src/companionprotocol.*   MeshCore companion frame encode/decode
 src/contactmodel.*        Contact list model (adverts), favourites
 src/messagestore.*        Persistent message history, unread counts, last channel
+src/systemtheme.*         Whether the phone uses a dark Lomiri theme ("SystemTheme")
 
-qml/main.qml              Window, shared state (history, unread), page stack
+qml/main.qml              Window, shared state (history, unread), colours, page stack
 qml/DevicesPage.qml       Scan and pick a node
 qml/ConnectionPage.qml    Connect, node info, protocol trace
 qml/ChannelsPage.qml      Channel list, add / remove channels
@@ -232,8 +254,11 @@ qml/ContactRow.qml        One contact in the list
 qml/DirectChat.qml        Direct message chat with one contact
 qml/RepeaterAdmin.qml     Repeater / room server login, status, CLI
 qml/UnreadBadge.qml       Red unread-count badge
-qml/AppLabel.qml          Label with an explicit colour
-qml/AppField.qml          TextField with an explicit colour and background
+qml/AppearanceChoice.qml  Light / dark / like-the-phone selection
+qml/AppLabel.qml          Label in the theme's text colour
+qml/AppField.qml          TextField in the theme's field colours
+.github/workflows/build.yml
+                          Builds the click package, publishes releases
 ```
 
 Coding rules for contributions are in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -283,7 +308,7 @@ All paths are inside the app's AppArmor-writable directories:
 |---|---|
 | `~/.local/share/ubmeshcore/channel_messages.jsonl` | Channel history, one JSON object per line, newest 3000 kept |
 | `~/.local/share/ubmeshcore/ubmeshcore.log` | App log (also in the journal) |
-| `~/.config/ubmeshcore/ubMeshcore.conf` | Favourites, last opened channel |
+| `~/.config/ubmeshcore/ubMeshcore.conf` | Favourites, last opened channel, appearance |
 
 Confined apps cannot write to `/tmp` or directly to `~/.local/share`; an
 earlier version logged there, and its error path then called `fclose(NULL)` and
@@ -450,7 +475,9 @@ overhears. It is decoded to a one-line summary and kept out of the UI.
   platform palette renders controls without explicit colours dark-on-dark, and
   text becomes invisible rather than merely ugly. Use `AppLabel` and `AppField`
   rather than bare `Label` and `TextField` (and an `AppLabel` next to a bare
-  `CheckBox` instead of its `text`).
+  `CheckBox` instead of its `text`). Colours come from the `color…`
+  properties in `main.qml` so both themes stay readable; the few fixed ones
+  (contact type borders, unread badge, CLI console) work on either.
 - **The adapter is created at startup**, not lazily on the first scan: the
   *Start Scan* button is only enabled once the adapter is known to be ready.
 

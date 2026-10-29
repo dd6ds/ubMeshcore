@@ -72,13 +72,20 @@ void CompanionProtocol::handleReply(quint8 code, const QByteArray &payload)
     case RespChannelMsgRecv:
     case RespChannelMsgRecv2:
         handleChannelMessage(code, payload);
-        syncNextMessage();      // keep draining until the node says it is empty
+        continueDrain();        // keep draining until the node says it is empty
         break;
     case RespContactMsgRecv:
     case RespContactMsgRecv3:
         // v3 puts <snr:1> <reserved:2> in front of the v1/v2 layout.
         handleDirectMessage(payload, code == RespContactMsgRecv3 ? 3 : 0);
-        syncNextMessage();
+        continueDrain();
+        break;
+    case RespChannelDataRecv:
+        // <snr*4:i8> <reserved:2> <channel_idx> <path_len> <data_type:u16> <len> <data>
+        // Nothing the app can show; skip it so the messages behind it follow.
+        qDebug() << "CompanionProtocol: skipping channel datagram on channel"
+                 << (payload.size() > 3 ? int(quint8(payload.at(3))) : -1);
+        continueDrain();
         break;
     case RespContactsStart:
         emit contactsSyncStarted(int(readLE32(payload, 0)));
@@ -90,6 +97,7 @@ void CompanionProtocol::handleReply(quint8 code, const QByteArray &payload)
         emit contactsSyncFinished(readLE32(payload, 0));
         break;
     case RespNoMoreMessages:
+        m_syncsInFlight = 0;
         emit noMoreMessages();
         break;
     case RespSent:
@@ -103,8 +111,20 @@ void CompanionProtocol::handleReply(quint8 code, const QByteArray &payload)
         handleError(payload);
         break;
     default:
+        if (m_syncsInFlight > 0) {
+            qWarning() << "CompanionProtocol: skipping unknown queued item"
+                       << QString::number(code, 16);
+            continueDrain();
+        }
         break;
     }
+}
+
+void CompanionProtocol::continueDrain()
+{
+    if (m_syncsInFlight > 0)
+        --m_syncsInFlight;
+    syncNextMessage();
 }
 
 void CompanionProtocol::handlePush(quint8 code, const QByteArray &payload)

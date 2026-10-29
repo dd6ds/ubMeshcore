@@ -14,5 +14,6 @@
     <file>qml/AppLabel.qml</file>
     <file>qml/AppField.qml</file>
     <file>qml/UnreadBadge.qml</file>
+    <file>qml/AppearanceChoice.qml</file>
   </qresource>
 </RCC>

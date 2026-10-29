@@ -27,14 +27,14 @@ Page {
 
         AppLabel {
             text: BluetoothManager.selectedAddress
-            color: "#666"
+            color: app.colorSecondaryText
             font.pixelSize: app.fontSecondary
             Layout.fillWidth: true
         }
 
         AppLabel {
             text: BluetoothManager.connectionState
-            color: BluetoothManager.uartReady ? "#2e7d32" : "#666"
+            color: BluetoothManager.uartReady ? app.colorSuccess : app.colorSecondaryText
             font.pixelSize: app.fontBody
             Layout.fillWidth: true
             wrapMode: Text.Wrap
@@ -64,7 +64,7 @@ Page {
             text: qsTr("Node: %1").arg(BluetoothManager.nodeName || qsTr("(unnamed)"))
             visible: BluetoothManager.sessionReady
             font.pixelSize: app.fontBody
-            color: "#2e7d32"
+            color: app.colorSuccess
             Layout.fillWidth: true
         }
 
@@ -81,7 +81,7 @@ Page {
         AppLabel {
             text: BluetoothManager.trafficLog.slice(-7).join("\n")
             visible: BluetoothManager.uartReady
-            color: "#555"
+            color: app.colorSecondaryText
             font.pixelSize: Math.round(app.gu * 1.0)
             font.family: "monospace"
             Layout.fillWidth: true

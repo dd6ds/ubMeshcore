@@ -86,7 +86,7 @@ Item {
                     text: BluetoothManager.sessionReady
                           ? qsTr("Direct message") + "  ·  " + chat.keyHex.substring(0, 12)
                           : qsTr("Not connected to your node")
-                    color: BluetoothManager.sessionReady ? "#666" : "#b00"
+                    color: BluetoothManager.sessionReady ? app.colorSecondaryText : app.colorError
                     font.pixelSize: chat.fontSecondary
                     elide: Text.ElideRight
                 }
@@ -111,7 +111,7 @@ Item {
                 wrapMode: Text.Wrap
                 visible: list.contentHeight < 1
                 text: qsTr("No messages with %1 yet.").arg(chat.contactName)
-                color: "#888"
+                color: app.colorSecondaryText
                 font.pixelSize: chat.fontSecondary
             }
 
@@ -132,7 +132,7 @@ Item {
                                     + Math.round(chat.gu * 2))
                     height: bubbleColumn.implicitHeight + Math.round(chat.gu * 1.2)
                     radius: Math.round(chat.gu * 0.8)
-                    color: mine ? "#dcebfb" : "#f0f0f0"
+                    color: mine ? app.colorBubbleOwn : app.colorSurface
 
                     Column {
                         id: bubbleColumn
@@ -150,8 +150,9 @@ Item {
                             id: statusLabel
                             text: model.time + (mine && chat.statusText(model.status).length
                                                 ? "  ·  " + chat.statusText(model.status) : "")
-                            color: model.status === "delivered" ? "#2e7d32"
-                                 : model.status === "unconfirmed" ? "#e65100" : "#666"
+                            color: model.status === "delivered" ? app.colorSuccess
+                                 : model.status === "unconfirmed" ? app.colorWarning
+                                 : app.colorSecondaryText
                             font.pixelSize: chat.fontSecondary
                         }
                     }
@@ -170,7 +171,7 @@ Item {
             visible: notOnNode
             text: qsTr("%1 is not stored on your node yet. Sending a message saves it there first.")
                   .arg(chat.contactName)
-            color: "#e65100"
+            color: app.colorWarning
             wrapMode: Text.Wrap
             font.pixelSize: chat.fontSecondary
         }
@@ -179,7 +180,7 @@ Item {
             id: errorLabel
             Layout.fillWidth: true
             visible: text.length > 0
-            color: "#b00"
+            color: app.colorError
             wrapMode: Text.Wrap
             font.pixelSize: chat.fontSecondary
         }

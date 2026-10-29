@@ -9,6 +9,7 @@ import QtQuick.Layouts 1.12
 Item {
     id: admin
 
+    property var app                 // main.qml root (colours)
     property string keyHex: ""
     property string nodeName: ""
     property string nodeType: "repeater"
@@ -125,7 +126,7 @@ Item {
                         Layout.fillWidth: true
                         text: (admin.nodeType === "room" ? "Room server" : "Repeater")
                               + "  ·  " + admin.keyHex.substring(0, 12)
-                        color: "#666"
+                        color: admin.app.colorSecondaryText
                         font.pixelSize: admin.fontSecondary
                     }
                 }
@@ -133,7 +134,7 @@ Item {
                     id: favStar
                     property bool fav: BluetoothManager.contactsModel.isFavorite(admin.keyHex)
                     text: fav ? "★" : "☆"
-                    color: fav ? "#f9a825" : "#9e9e9e"
+                    color: fav ? admin.app.colorFavorite : admin.app.colorInactive
                     font.pixelSize: Math.round(admin.gu * 2.8)
                     Connections {
                         target: BluetoothManager.contactsModel
@@ -153,8 +154,8 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 visible: !BluetoothManager.sessionReady
-                color: "#fff3e0"
-                border.color: "#f57c00"
+                color: admin.app.colorWarningBackground
+                border.color: admin.app.colorWarningBorder
                 radius: 4
                 implicitHeight: connLabel.implicitHeight + Math.round(admin.gu * 1.2)
                 AppLabel {
@@ -163,7 +164,7 @@ Item {
                     anchors.margins: Math.round(admin.gu * 0.6)
                     wrapMode: Text.Wrap
                     font.pixelSize: admin.fontSecondary
-                    color: "#e65100"
+                    color: admin.app.colorWarning
                     text: BluetoothManager.connected
                           ? qsTr("Connected, node session still starting... (%1)")
                             .arg(BluetoothManager.connectionState)
@@ -176,7 +177,7 @@ Item {
                 Layout.fillWidth: true
                 visible: admin.busy.length > 0
                 text: admin.busy
-                color: "#0078d7"
+                color: admin.app.colorAccent
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap
             }
@@ -216,7 +217,8 @@ Item {
                 Layout.fillWidth: true
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap
-                color: admin.isAdmin ? "#2e7d32" : (admin.loggedIn ? "#f57c00" : "#666")
+                color: admin.isAdmin ? admin.app.colorSuccess
+                     : (admin.loggedIn ? admin.app.colorWarning : admin.app.colorSecondaryText)
                 text: admin.isAdmin ? qsTr("Admin session active - CLI commands enabled")
                     : admin.loggedIn
                       ? qsTr("Guest login - status only, CLI needs the admin password")
@@ -250,7 +252,7 @@ Item {
                 visible: admin.statusRows.length === 0
                 text: qsTr("No status yet. Most repeaters answer status requests "
                            + "only after a login.")
-                color: "#888"
+                color: admin.app.colorSecondaryText
                 font.pixelSize: admin.fontSecondary
                 wrapMode: Text.Wrap
             }
@@ -266,7 +268,7 @@ Item {
                         readonly property var r: admin.statusRows[Math.floor(index / 2)]
                         Layout.fillWidth: index % 2 === 1
                         text: index % 2 === 0 ? r.label : r.value
-                        color: index % 2 === 0 ? "#555" : "#111"
+                        color: index % 2 === 0 ? admin.app.colorSecondaryText : admin.app.colorText
                         font.bold: index % 2 === 1
                         font.pixelSize: admin.fontSecondary
                     }

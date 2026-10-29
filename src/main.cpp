@@ -1,5 +1,6 @@
 // Entry point: sets up logging, translations and the QML engine, and
-// exposes the C++ backend (BluetoothManager, MessageStore) to QML.
+// exposes the C++ backend (BluetoothManager, MessageStore) and the phone's
+// light/dark theme (SystemTheme) to QML.
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -17,6 +18,7 @@
 
 #include "bluetoothmanager.h"
 #include "messagestore.h"
+#include "systemtheme.h"
 
 // Confined click apps may only write below ~/.local/share/<package-name>,
 // ~/.cache/<package-name> and ~/.config/<package-name>. /tmp and the bare
@@ -107,6 +109,8 @@ static BluetoothManager *exposeBackend(QQmlApplicationEngine &engine) {
         QStringLiteral("Provided by BluetoothManager.contactsModel"));
     engine.rootContext()->setContextProperty("BluetoothManager", bluetoothManager);
     engine.rootContext()->setContextProperty("MessageStore", new MessageStore(&engine));
+    engine.rootContext()->setContextProperty(QStringLiteral("SystemTheme"),
+                                             new SystemTheme(&engine));
     const int gridUnit = gridUnitPx();
     engine.rootContext()->setContextProperty("gridUnitPx", gridUnit);
     logMessage(QString("GRID_UNIT_PX = %1").arg(gridUnit));

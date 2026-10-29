@@ -1,6 +1,29 @@
 <?xml version='1.0' encoding='utf-8'?>
 <TS version="2.1" language="de_DE">
 <context>
+    <name>AppearanceChoice</name>
+    <message>
+        <location filename="../qml/AppearanceChoice.qml" line="+14" />
+        <source>Appearance</source>
+        <translation>Darstellung</translation>
+    </message>
+    <message>
+        <location line="+10" />
+        <source>Like the phone</source>
+        <translation>Wie das Telefon</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Light</source>
+        <translation>Hell</translation>
+    </message>
+    <message>
+        <location line="+1" />
+        <source>Dark</source>
+        <translation>Dunkel</translation>
+    </message>
+</context>
+<context>
     <name>BluetoothManager</name>
     <message>
         <location filename="../src/bluetoothmanager_mesh.cpp" line="+150" />
@@ -468,7 +491,7 @@
         <translation>Kanäle auf %1:</translation>
     </message>
     <message>
-        <location line="+43" />
+        <location line="+44" />
         <source>1 new message</source>
         <translation>1 neue Nachricht</translation>
     </message>
@@ -634,7 +657,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
 <context>
     <name>ContactList</name>
     <message>
-        <location filename="../qml/ContactList.qml" line="+48" />
+        <location filename="../qml/ContactList.qml" line="+49" />
         <source>Repeater</source>
         <translation>Repeater</translation>
     </message>
@@ -679,7 +702,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>%1 Hops</translation>
     </message>
     <message>
-        <location line="+45" />
+        <location line="+46" />
         <source>Send message</source>
         <translation>Nachricht senden</translation>
     </message>
@@ -815,7 +838,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Löschen</translation>
     </message>
     <message>
-        <location line="+48" />
+        <location line="+51" />
         <source> - nodes and repeaters in range will list you after receiving it.</source>
         <translation> - Nodes und Repeater in Reichweite listen dich, sobald sie es empfangen.</translation>
     </message>
@@ -866,7 +889,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
 <context>
     <name>ContactRow</name>
     <message>
-        <location filename="../qml/ContactRow.qml" line="+79" />
+        <location filename="../qml/ContactRow.qml" line="+81" />
         <source>not on node</source>
         <translation>nicht auf dem Node</translation>
     </message>
@@ -975,7 +998,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Noch keine Nachrichten mit %1.</translation>
     </message>
     <message>
-        <location line="+58" />
+        <location line="+59" />
         <source>%1 is not stored on your node yet. Sending a message saves it there first.</source>
         <translation>%1 ist noch nicht auf deinem Node gespeichert. Beim Senden wird der Kontakt zuerst dort gespeichert.</translation>
     </message>
@@ -993,7 +1016,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
 <context>
     <name>RepeaterAdmin</name>
     <message>
-        <location filename="../qml/RepeaterAdmin.qml" line="+44" />
+        <location filename="../qml/RepeaterAdmin.qml" line="+45" />
         <source>Waiting for reply to "%1"...</source>
         <translation>Warte auf Antwort auf „%1“...</translation>
     </message>
@@ -1064,7 +1087,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
         <translation>Anmeldeanfrage gesendet</translation>
     </message>
     <message>
-        <location line="+11" />
+        <location line="+12" />
         <source>Admin session active - CLI commands enabled</source>
         <translation>Admin-Sitzung aktiv - CLI-Befehle freigeschaltet</translation>
     </message>
@@ -1162,7 +1185,7 @@ Der Nachrichtenverlauf in der App wird ebenfalls gelöscht. Du kannst den Kanal 
 <context>
     <name>main</name>
     <message>
-        <location filename="../qml/main.qml" line="+197" />
+        <location filename="../qml/main.qml" line="+251" />
         <source>Battery: %1% (%2 V)</source>
         <translation>Akku: %1% (%2 V)</translation>
     </message>
