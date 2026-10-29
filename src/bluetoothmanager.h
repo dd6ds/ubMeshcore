@@ -14,6 +14,7 @@
 #include <QString>
 #include <QTimer>
 #include <QVariant>
+#include <QVector>
 
 #include "companionprotocol.h"
 #include "devicelistmodel.h"
@@ -243,6 +244,8 @@ private:
     void requestAllChannels(int count);
     bool storeContactOnNode(const MeshContact &c);
     QString keyHexForPrefix(const QByteArray &prefix) const;
+    void emitDirectMessage(const QByteArray &prefix, const QString &text, quint32 ts);
+    void releaseHeldDirectMessages();
     void setBattery(int milliVolts);
     void setAdvertInfo(bool ok, const QString &text);
     QVariantMap routeInfo(const MessagePath &path) const;
@@ -299,6 +302,16 @@ private:
     ContactListModel m_contacts;
     bool m_contactsSyncing = false;
     quint32 m_contactsLastMod = 0;      // 'since' for incremental syncs
+    /// A DM only carries a 6-byte key prefix. While the contact table is
+    /// being reloaded it cannot be matched to its contact, so DMs wait here
+    /// until the reload is done (see refreshContacts()).
+    struct HeldDirectMessage {
+        QByteArray prefix;
+        QString text;
+        quint32 ts;
+    };
+    QVector<HeldDirectMessage> m_heldDirectMessages;
+    bool m_holdDirectMessages = false;
     int m_maxContacts = 0;              // node contact table size, 0 = unknown
     QTimer m_contactRefreshDebounce;    // coalesces bursts of advert pushes
     QTimer m_contactAgeTimer;           // keeps "x min ago" texts current

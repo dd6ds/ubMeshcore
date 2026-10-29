@@ -55,6 +55,7 @@ QString CompanionProtocol::responseName(quint8 code)
     case RespContactMsgRecv3: return QStringLiteral("CONTACT_MSG_RECV_V3");
     case RespChannelMsgRecv2: return QStringLiteral("CHANNEL_MSG_RECV");
     case RespChannelInfo:     return QStringLiteral("CHANNEL_INFO");
+    case RespChannelDataRecv: return QStringLiteral("CHANNEL_DATA_RECV");
     case RespOk:             return QStringLiteral("OK");
     case RespErr:            return QStringLiteral("ERR");
     case RespContactsStart:  return QStringLiteral("CONTACTS_START");
@@ -101,6 +102,7 @@ void CompanionProtocol::emitFrame(const QByteArray &frame)
 void CompanionProtocol::sendAppStart(const QString &appName)
 {
     // 01 <app_ver> <6 reserved bytes> <app name>
+    m_syncsInFlight = 0;                // new session, nothing outstanding
     QByteArray frame;
     frame.append(char(CmdAppStart));
     frame.append(char(1));              // app protocol version
@@ -256,6 +258,7 @@ void CompanionProtocol::sendDirectText(const QByteArray &publicKey, const QStrin
 
 void CompanionProtocol::syncNextMessage()
 {
+    ++m_syncsInFlight;
     QByteArray frame;
     frame.append(char(CmdSyncNextMessage));
     emitFrame(frame);

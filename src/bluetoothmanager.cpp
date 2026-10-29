@@ -446,6 +446,7 @@ void BluetoothManager::teardownConnection()
     m_connected = false;
     m_connecting = false;
     setBattery(0);
+    releaseHeldDirectMessages();
 }
 
 void BluetoothManager::disconnect()
@@ -495,6 +496,7 @@ void BluetoothManager::onControllerDisconnected()
         m_contactsSyncing = false;
         emit contactsSyncingChanged();
     }
+    releaseHeldDirectMessages();
     emit nodeInfoChanged();
     setConnectionState(tr("Not connected"));
     emit connectionChanged();
